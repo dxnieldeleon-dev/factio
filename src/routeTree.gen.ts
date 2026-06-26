@@ -19,6 +19,7 @@ import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedClientsRouteImport } from './routes/_authenticated/clients'
 import { Route as AuthenticatedProductsNewRouteImport } from './routes/_authenticated/products.new'
+import { Route as AuthenticatedInvoicesNewRouteImport } from './routes/_authenticated/invoices.new'
 import { Route as AuthenticatedClientsNewRouteImport } from './routes/_authenticated/clients.new'
 
 const AuthRoute = AuthRouteImport.update({
@@ -71,6 +72,12 @@ const AuthenticatedProductsNewRoute =
     path: '/new',
     getParentRoute: () => AuthenticatedProductsRoute,
   } as any)
+const AuthenticatedInvoicesNewRoute =
+  AuthenticatedInvoicesNewRouteImport.update({
+    id: '/invoices/new',
+    path: '/invoices/new',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedClientsNewRoute = AuthenticatedClientsNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -87,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/clients/new': typeof AuthenticatedClientsNewRoute
+  '/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
 }
 export interface FileRoutesByTo {
@@ -99,6 +107,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/clients/new': typeof AuthenticatedClientsNewRoute
+  '/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
 }
 export interface FileRoutesById {
@@ -113,6 +122,7 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/clients/new': typeof AuthenticatedClientsNewRoute
+  '/_authenticated/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/_authenticated/products/new': typeof AuthenticatedProductsNewRoute
 }
 export interface FileRouteTypes {
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/settings'
     | '/clients/new'
+    | '/invoices/new'
     | '/products/new'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/settings'
     | '/clients/new'
+    | '/invoices/new'
     | '/products/new'
   id:
     | '__root__'
@@ -152,6 +164,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/settings'
     | '/_authenticated/clients/new'
+    | '/_authenticated/invoices/new'
     | '/_authenticated/products/new'
   fileRoutesById: FileRoutesById
 }
@@ -233,6 +246,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProductsNewRouteImport
       parentRoute: typeof AuthenticatedProductsRoute
     }
+    '/_authenticated/invoices/new': {
+      id: '/_authenticated/invoices/new'
+      path: '/invoices/new'
+      fullPath: '/invoices/new'
+      preLoaderRoute: typeof AuthenticatedInvoicesNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/clients/new': {
       id: '/_authenticated/clients/new'
       path: '/new'
@@ -274,6 +294,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedProductsRoute: typeof AuthenticatedProductsRouteWithChildren
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedInvoicesNewRoute: typeof AuthenticatedInvoicesNewRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -283,6 +304,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProductsRoute: AuthenticatedProductsRouteWithChildren,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedInvoicesNewRoute: AuthenticatedInvoicesNewRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
