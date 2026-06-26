@@ -8,7 +8,7 @@ import { TAX_REGIMES } from "@/lib/sat-catalogs";
 import { validateRFC } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/profile")({
-  component: Profile;
+  component: Profile,
 });
 
 async function loadProfile() {
