@@ -33,15 +33,19 @@ function NewClient() {
     const rfcCheck = validateRFC(form.rfc);
     if (!rfcCheck.valid) { toast.error(rfcCheck.reason!); return; }
     if (!form.legal_name.trim()) { toast.error("La razón social es requerida"); return; }
+    if (!/^\d{5}$/.test(form.postal_code.trim())) { toast.error("El código postal debe tener 5 dígitos"); return; }
+    if (!form.tax_regime) { toast.error("Selecciona un régimen fiscal"); return; }
+    if (!form.cfdi_use) { toast.error("Selecciona un Uso CFDI"); return; }
     setLoading(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr || !userData.user) throw new Error("Sesión expirada, vuelve a iniciar sesión");
       const { error } = await supabase.from("clients").insert({
-        user_id: userData.user!.id,
+        user_id: userData.user.id,
         rfc: form.rfc.toUpperCase().trim(),
         legal_name: form.legal_name.trim(),
         tax_regime: form.tax_regime,
-        postal_code: form.postal_code.trim() || null,
+        postal_code: form.postal_code.trim(),
         cfdi_use: form.cfdi_use,
         email: form.email.trim() || null,
       });
@@ -50,6 +54,7 @@ function NewClient() {
       qc.invalidateQueries({ queryKey: ["clients"] });
       navigate({ to: "/clients" });
     } catch (err) {
+      console.error("[clients.new] insert failed", err);
       toast.error(err instanceof Error ? err.message : "No pudimos guardar el cliente");
     } finally {
       setLoading(false);
