@@ -5,7 +5,7 @@ import { Search, Plus, Star, Mail, Users, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { EmptyState } from "@/components/empty-state";
 
-export const Route = createFileRoute("/_authenticated/clients")({
+export const Route = createFileRoute("/_authenticated/clients/")({
   component: ClientsList,
 });
 
