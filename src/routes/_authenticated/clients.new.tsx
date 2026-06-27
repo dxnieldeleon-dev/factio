@@ -92,7 +92,7 @@ function NewClient() {
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Código postal">
-            <input value={form.postal_code} onChange={(e) => set("postal_code", e.target.value)} placeholder="00000" maxLength={5} className="ff-input font-mono" />
+            <input value={form.postal_code} onChange={(e) => set("postal_code", e.target.value.replace(/\D/g, ""))} placeholder="00000" maxLength={5} inputMode="numeric" pattern="\d{5}" className="ff-input font-mono" required />
           </Field>
           <Field label="Uso CFDI">
             <select value={form.cfdi_use} onChange={(e) => set("cfdi_use", e.target.value)} className="ff-input">
