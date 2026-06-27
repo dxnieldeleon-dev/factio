@@ -72,22 +72,25 @@ function ClientsList() {
         ) : (
           <ul className="divide-y divide-border rounded-3xl border border-border bg-surface">
             {filtered.map((c) => (
-              <li key={c.id} className="flex items-center gap-3 px-4 py-3.5">
-                <div className="grid size-10 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-bold uppercase text-primary">
-                  {c.legal_name.slice(0, 2)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <p className="truncate font-semibold">{c.legal_name}</p>
-                    {c.is_favorite && <Star className="size-3.5 fill-warning text-warning" />}
+              <li key={c.id}>
+                <Link
+                  to="/clients/$id/edit"
+                  params={{ id: c.id }}
+                  className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/40"
+                >
+                  <div className="grid size-10 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-bold uppercase text-primary">
+                    {c.legal_name.slice(0, 2)}
                   </div>
-                  <p className="mt-0.5 font-mono text-[10px] uppercase text-muted-foreground">{c.rfc}</p>
-                </div>
-                {c.email && (
-                  <a href={`mailto:${c.email}`} className="grid size-9 place-items-center rounded-full bg-muted text-muted-foreground">
-                    <Mail className="size-4" />
-                  </a>
-                )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate font-semibold">{c.legal_name}</p>
+                      {c.is_favorite && <Star className="size-3.5 fill-warning text-warning" />}
+                    </div>
+                    <p className="mt-0.5 font-mono text-[10px] uppercase text-muted-foreground">{c.rfc}</p>
+                  </div>
+                  {c.email && <Mail className="size-4 text-muted-foreground" />}
+                  <ChevronRight className="size-4 text-muted-foreground" />
+                </Link>
               </li>
             ))}
           </ul>
