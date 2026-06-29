@@ -31,6 +31,58 @@ function Profile() {
     postal_code: string; email: string; phone: string;
   } | null>(null);
 
+  const cerInputRef = useRef<HTMLInputElement>(null);
+  const keyInputRef = useRef<HTMLInputElement>(null);
+  const [cerFile, setCerFile] = useState<File | null>(null);
+  const [keyFile, setKeyFile] = useState<File | null>(null);
+  const [csdPassword, setCsdPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [savingCsd, setSavingCsd] = useState(false);
+
+  const hasCsdConfigured = !!(data?.company?.csd_cer_url && data?.company?.csd_key_url);
+  const canSaveCsd = !!cerFile || !!keyFile || csdPassword.length > 0;
+
+  async function onSaveCsd() {
+    if (!data?.user) return;
+    if (!data.company) {
+      toast.error("Primero guarda los datos fiscales del perfil");
+      return;
+    }
+    setSavingCsd(true);
+    try {
+      const userId = data.user.id;
+      const updates: Record<string, string> = {};
+      if (cerFile) {
+        const path = `${userId}/cert.cer`;
+        const { error } = await supabase.storage.from("csd-files").upload(path, cerFile, { upsert: true });
+        if (error) throw error;
+        updates.csd_cer_url = path;
+      }
+      if (keyFile) {
+        const path = `${userId}/private.key`;
+        const { error } = await supabase.storage.from("csd-files").upload(path, keyFile, { upsert: true });
+        if (error) throw error;
+        updates.csd_key_url = path;
+      }
+      if (csdPassword.length > 0) {
+        updates.csd_password_encrypted = csdPassword;
+      }
+      if (Object.keys(updates).length > 0) {
+        const { error } = await supabase.from("companies").update(updates).eq("id", data.company.id);
+        if (error) throw error;
+      }
+      toast.success("CSD guardado correctamente");
+      setCerFile(null);
+      setKeyFile(null);
+      setCsdPassword("");
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No pudimos guardar el CSD");
+    } finally {
+      setSavingCsd(false);
+    }
+  }
+
   const current = form ?? {
     legal_name: data?.company?.legal_name ?? "",
     trade_name: data?.company?.trade_name ?? "",
