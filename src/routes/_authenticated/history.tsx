@@ -60,7 +60,6 @@ function History() {
         {([
           ["all", "Todas"],
           ["issued", "Vigentes"],
-          ["draft", "Borradores"],
           ["cancelled", "Canceladas"],
         ] as const).map(([key, label]) => (
           <button
