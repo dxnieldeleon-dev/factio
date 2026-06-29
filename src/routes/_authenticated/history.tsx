@@ -21,7 +21,7 @@ async function loadInvoices() {
   return data ?? [];
 }
 
-type StatusFilter = "all" | "issued" | "draft" | "cancelled";
+type StatusFilter = "all" | "issued" | "cancelled";
 
 function History() {
   const { data, isLoading } = useQuery({ queryKey: ["invoices", "history"], queryFn: loadInvoices });
