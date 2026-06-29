@@ -190,6 +190,110 @@ function Profile() {
         </button>
       </form>
 
+      <section className="mt-8 space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Certificado de Sello Digital (CSD)</h2>
+
+        {hasCsdConfigured ? (
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[11px] font-semibold text-emerald-700">
+            <CheckCircle2 className="size-3.5" /> CSD Configurado
+          </div>
+        ) : (
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-[11px] font-semibold text-amber-800">
+            <AlertTriangle className="size-3.5" /> Sin CSD — No podrás timbrar
+          </div>
+        )}
+
+        <input
+          ref={cerInputRef}
+          type="file"
+          accept=".cer"
+          className="hidden"
+          onChange={(e) => setCerFile(e.target.files?.[0] ?? null)}
+        />
+        <input
+          ref={keyInputRef}
+          type="file"
+          accept=".key"
+          className="hidden"
+          onChange={(e) => setKeyFile(e.target.files?.[0] ?? null)}
+        />
+
+        <Field label="Certificado (.cer)">
+          <button
+            type="button"
+            onClick={() => cerInputRef.current?.click()}
+            className="ff-input flex items-center justify-between gap-2 text-left"
+          >
+            <span className="flex items-center gap-2 truncate text-sm">
+              <Upload className="size-4 text-muted-foreground shrink-0" />
+              <span className="truncate">{cerFile?.name ?? "Seleccionar archivo .cer"}</span>
+            </span>
+            <span className="text-xs text-primary font-semibold">{cerFile ? "Cambiar" : "Subir"}</span>
+          </button>
+          {!cerFile && data?.company?.csd_cer_url && (
+            <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-700">
+              <CheckCircle2 className="size-3" /> Archivo cargado
+            </p>
+          )}
+        </Field>
+
+        <Field label="Llave privada (.key)">
+          <button
+            type="button"
+            onClick={() => keyInputRef.current?.click()}
+            className="ff-input flex items-center justify-between gap-2 text-left"
+          >
+            <span className="flex items-center gap-2 truncate text-sm">
+              <Upload className="size-4 text-muted-foreground shrink-0" />
+              <span className="truncate">{keyFile?.name ?? "Seleccionar archivo .key"}</span>
+            </span>
+            <span className="text-xs text-primary font-semibold">{keyFile ? "Cambiar" : "Subir"}</span>
+          </button>
+          {!keyFile && data?.company?.csd_key_url && (
+            <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-700">
+              <CheckCircle2 className="size-3" /> Archivo cargado
+            </p>
+          )}
+        </Field>
+
+        <Field label="Contraseña del CSD">
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={csdPassword}
+              onChange={(e) => setCsdPassword(e.target.value)}
+              placeholder="Contraseña de tu llave privada"
+              className="ff-input pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((s) => !s)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              aria-label={showPassword ? "Ocultar" : "Mostrar"}
+            >
+              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            Esta es la contraseña que elegiste al generar tu CSD en el portal del SAT.
+          </p>
+        </Field>
+
+        <button
+          type="button"
+          onClick={onSaveCsd}
+          disabled={!canSaveCsd || savingCsd}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {savingCsd ? <Loader2 className="size-4 animate-spin" /> : "Guardar CSD"}
+        </button>
+
+        <p className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-[11px] text-amber-800">
+          <ShieldCheck className="size-3.5 mt-0.5 shrink-0" />
+          Tus archivos CSD se almacenan cifrados y solo son accesibles por ti. Nunca se comparten con terceros.
+        </p>
+      </section>
+
       <section className="mt-8 space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cuenta</h2>
         <ProfileLink to="/settings" icon={Settings} title="Configuración" subtitle="Notificaciones, tema, biometría" />
