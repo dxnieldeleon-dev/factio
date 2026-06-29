@@ -51,7 +51,7 @@ function Profile() {
     setSavingCsd(true);
     try {
       const userId = data.user.id;
-      const updates: Record<string, string> = {};
+      const updates: { csd_cer_url?: string; csd_key_url?: string; csd_password_encrypted?: string } = {};
       if (cerFile) {
         const path = `${userId}/cert.cer`;
         const { error } = await supabase.storage.from("csd-files").upload(path, cerFile, { upsert: true });
