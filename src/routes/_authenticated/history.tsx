@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Search, FileText, Download } from "lucide-react";
+import { Search, FileText, Download, Share2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatMXN, formatDateMX } from "@/lib/format";
 import { StatusChip } from "./dashboard";
@@ -21,7 +21,7 @@ async function loadInvoices() {
   return data ?? [];
 }
 
-type StatusFilter = "all" | "issued" | "draft" | "cancelled";
+type StatusFilter = "all" | "issued" | "cancelled";
 
 function History() {
   const { data, isLoading } = useQuery({ queryKey: ["invoices", "history"], queryFn: loadInvoices });
@@ -60,7 +60,6 @@ function History() {
         {([
           ["all", "Todas"],
           ["issued", "Vigentes"],
-          ["draft", "Borradores"],
           ["cancelled", "Canceladas"],
         ] as const).map(([key, label]) => (
           <button
@@ -99,8 +98,17 @@ function History() {
                       <StatusChip status={inv.status} />
                     </div>
                   </div>
-                  {inv.xml_url && (
-                    <div className="mt-3 flex gap-2 border-t border-border pt-3">
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+                    {inv.pdf_url && (
+                      <a
+                        href={inv.pdf_url}
+                        download={`${inv.series}-${inv.folio}.pdf`}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-[11px] font-semibold"
+                      >
+                        <Download className="size-3" /> PDF
+                      </a>
+                    )}
+                    {inv.xml_url && (
                       <a
                         href={inv.xml_url}
                         download={`${inv.series}-${inv.folio}.xml`}
@@ -108,8 +116,21 @@ function History() {
                       >
                         <Download className="size-3" /> XML
                       </a>
-                    </div>
-                  )}
+                    )}
+                    {(inv.pdf_url || inv.xml_url) && (
+                      <a
+                        href={`https://wa.me/?text=${encodeURIComponent(
+                          `Factura ${inv.series}-${String(inv.folio).padStart(6, "0")} por ${formatMXN(inv.total)}${inv.pdf_url ? `\n${inv.pdf_url}` : ""}`,
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-[#25D366] px-3 py-1 text-[11px] font-semibold text-white"
+                      >
+                        <Share2 className="size-3" /> WhatsApp
+                      </a>
+                    )}
+                  </div>
+
                 </li>
               );
             })}
