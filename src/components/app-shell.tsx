@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 const TABS = [
   { to: "/dashboard", label: "Inicio", icon: Home },
-  { to: "/history", label: "Historial", icon: Receipt },
+  { to: "/history", label: "Facturas", icon: Receipt },
   { to: "/clients", label: "Clientes", icon: Users },
   { to: "/products", label: "Productos", icon: Package },
   { to: "/profile", label: "Perfil", icon: User },

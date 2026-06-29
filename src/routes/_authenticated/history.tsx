@@ -42,7 +42,7 @@ function History() {
   return (
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
       <header>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Historial</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Facturas</p>
         <h1 className="text-2xl font-bold tracking-tight">Facturas</h1>
       </header>
 
