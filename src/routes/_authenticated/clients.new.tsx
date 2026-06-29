@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { validateRFC } from "@/lib/format";
-import { TAX_REGIMES, CFDI_USES } from "@/lib/sat-catalogs";
+import { TAX_REGIMES } from "@/lib/sat-catalogs";
 import { useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_authenticated/clients/new")({
@@ -20,8 +20,8 @@ function NewClient() {
     legal_name: "",
     tax_regime: "612",
     postal_code: "",
-    cfdi_use: "G03",
     email: "",
+    phone: "",
   });
 
   function set<K extends keyof typeof form>(k: K, v: string) {
@@ -35,7 +35,6 @@ function NewClient() {
     if (!form.legal_name.trim()) { toast.error("La razón social es requerida"); return; }
     if (!/^\d{5}$/.test(form.postal_code.trim())) { toast.error("El código postal debe tener 5 dígitos"); return; }
     if (!form.tax_regime) { toast.error("Selecciona un régimen fiscal"); return; }
-    if (!form.cfdi_use) { toast.error("Selecciona un Uso CFDI"); return; }
     setLoading(true);
     try {
       const { data: userData, error: userErr } = await supabase.auth.getUser();
@@ -46,8 +45,8 @@ function NewClient() {
         legal_name: form.legal_name.trim(),
         tax_regime: form.tax_regime,
         postal_code: form.postal_code.trim(),
-        cfdi_use: form.cfdi_use,
         email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
       });
       if (error) throw error;
       toast.success("Cliente agregado");
@@ -90,18 +89,14 @@ function NewClient() {
             {TAX_REGIMES.map((r) => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
           </select>
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Código postal">
-            <input value={form.postal_code} onChange={(e) => set("postal_code", e.target.value.replace(/\D/g, ""))} placeholder="00000" maxLength={5} inputMode="numeric" pattern="\d{5}" className="ff-input font-mono" required />
-          </Field>
-          <Field label="Uso CFDI">
-            <select value={form.cfdi_use} onChange={(e) => set("cfdi_use", e.target.value)} className="ff-input">
-              {CFDI_USES.map((u) => <option key={u.code} value={u.code}>{u.code}</option>)}
-            </select>
-          </Field>
-        </div>
+        <Field label="Código postal">
+          <input value={form.postal_code} onChange={(e) => set("postal_code", e.target.value.replace(/\D/g, ""))} placeholder="00000" maxLength={5} inputMode="numeric" pattern="\d{5}" className="ff-input font-mono" required />
+        </Field>
         <Field label="Correo (opcional)">
           <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="cliente@correo.com" className="ff-input" />
+        </Field>
+        <Field label="Teléfono (opcional)">
+          <input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="55 1234 5678" inputMode="tel" className="ff-input" />
         </Field>
 
         <button
