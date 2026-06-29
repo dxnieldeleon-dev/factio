@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { LogOut, Building2, Settings, Loader2, ShieldCheck } from "lucide-react";
+import { LogOut, Building2, Settings, Loader2, ShieldCheck, Eye, EyeOff, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { TAX_REGIMES } from "@/lib/sat-catalogs";
 import { validateRFC } from "@/lib/format";
@@ -30,6 +30,58 @@ function Profile() {
     legal_name: string; trade_name: string; rfc: string; tax_regime: string;
     postal_code: string; email: string; phone: string;
   } | null>(null);
+
+  const cerInputRef = useRef<HTMLInputElement>(null);
+  const keyInputRef = useRef<HTMLInputElement>(null);
+  const [cerFile, setCerFile] = useState<File | null>(null);
+  const [keyFile, setKeyFile] = useState<File | null>(null);
+  const [csdPassword, setCsdPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [savingCsd, setSavingCsd] = useState(false);
+
+  const hasCsdConfigured = !!(data?.company?.csd_cer_url && data?.company?.csd_key_url);
+  const canSaveCsd = !!cerFile || !!keyFile || csdPassword.length > 0;
+
+  async function onSaveCsd() {
+    if (!data?.user) return;
+    if (!data.company) {
+      toast.error("Primero guarda los datos fiscales del perfil");
+      return;
+    }
+    setSavingCsd(true);
+    try {
+      const userId = data.user.id;
+      const updates: { csd_cer_url?: string; csd_key_url?: string; csd_password_encrypted?: string } = {};
+      if (cerFile) {
+        const path = `${userId}/cert.cer`;
+        const { error } = await supabase.storage.from("csd-files").upload(path, cerFile, { upsert: true });
+        if (error) throw error;
+        updates.csd_cer_url = path;
+      }
+      if (keyFile) {
+        const path = `${userId}/private.key`;
+        const { error } = await supabase.storage.from("csd-files").upload(path, keyFile, { upsert: true });
+        if (error) throw error;
+        updates.csd_key_url = path;
+      }
+      if (csdPassword.length > 0) {
+        updates.csd_password_encrypted = csdPassword;
+      }
+      if (Object.keys(updates).length > 0) {
+        const { error } = await supabase.from("companies").update(updates).eq("id", data.company.id);
+        if (error) throw error;
+      }
+      toast.success("CSD guardado correctamente");
+      setCerFile(null);
+      setKeyFile(null);
+      setCsdPassword("");
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No pudimos guardar el CSD");
+    } finally {
+      setSavingCsd(false);
+    }
+  }
 
   const current = form ?? {
     legal_name: data?.company?.legal_name ?? "",
@@ -137,6 +189,110 @@ function Profile() {
           {saving ? <Loader2 className="size-4 animate-spin" /> : "Guardar perfil"}
         </button>
       </form>
+
+      <section className="mt-8 space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Certificado de Sello Digital (CSD)</h2>
+
+        {hasCsdConfigured ? (
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[11px] font-semibold text-emerald-700">
+            <CheckCircle2 className="size-3.5" /> CSD Configurado
+          </div>
+        ) : (
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-[11px] font-semibold text-amber-800">
+            <AlertTriangle className="size-3.5" /> Sin CSD — No podrás timbrar
+          </div>
+        )}
+
+        <input
+          ref={cerInputRef}
+          type="file"
+          accept=".cer"
+          className="hidden"
+          onChange={(e) => setCerFile(e.target.files?.[0] ?? null)}
+        />
+        <input
+          ref={keyInputRef}
+          type="file"
+          accept=".key"
+          className="hidden"
+          onChange={(e) => setKeyFile(e.target.files?.[0] ?? null)}
+        />
+
+        <Field label="Certificado (.cer)">
+          <button
+            type="button"
+            onClick={() => cerInputRef.current?.click()}
+            className="ff-input flex items-center justify-between gap-2 text-left"
+          >
+            <span className="flex items-center gap-2 truncate text-sm">
+              <Upload className="size-4 text-muted-foreground shrink-0" />
+              <span className="truncate">{cerFile?.name ?? "Seleccionar archivo .cer"}</span>
+            </span>
+            <span className="text-xs text-primary font-semibold">{cerFile ? "Cambiar" : "Subir"}</span>
+          </button>
+          {!cerFile && data?.company?.csd_cer_url && (
+            <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-700">
+              <CheckCircle2 className="size-3" /> Archivo cargado
+            </p>
+          )}
+        </Field>
+
+        <Field label="Llave privada (.key)">
+          <button
+            type="button"
+            onClick={() => keyInputRef.current?.click()}
+            className="ff-input flex items-center justify-between gap-2 text-left"
+          >
+            <span className="flex items-center gap-2 truncate text-sm">
+              <Upload className="size-4 text-muted-foreground shrink-0" />
+              <span className="truncate">{keyFile?.name ?? "Seleccionar archivo .key"}</span>
+            </span>
+            <span className="text-xs text-primary font-semibold">{keyFile ? "Cambiar" : "Subir"}</span>
+          </button>
+          {!keyFile && data?.company?.csd_key_url && (
+            <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-700">
+              <CheckCircle2 className="size-3" /> Archivo cargado
+            </p>
+          )}
+        </Field>
+
+        <Field label="Contraseña del CSD">
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={csdPassword}
+              onChange={(e) => setCsdPassword(e.target.value)}
+              placeholder="Contraseña de tu llave privada"
+              className="ff-input pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((s) => !s)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              aria-label={showPassword ? "Ocultar" : "Mostrar"}
+            >
+              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            Esta es la contraseña que elegiste al generar tu CSD en el portal del SAT.
+          </p>
+        </Field>
+
+        <button
+          type="button"
+          onClick={onSaveCsd}
+          disabled={!canSaveCsd || savingCsd}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {savingCsd ? <Loader2 className="size-4 animate-spin" /> : "Guardar CSD"}
+        </button>
+
+        <p className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-[11px] text-amber-800">
+          <ShieldCheck className="size-3.5 mt-0.5 shrink-0" />
+          Tus archivos CSD se almacenan cifrados y solo son accesibles por ti. Nunca se comparten con terceros.
+        </p>
+      </section>
 
       <section className="mt-8 space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cuenta</h2>
