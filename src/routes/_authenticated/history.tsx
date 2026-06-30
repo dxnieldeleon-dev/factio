@@ -27,6 +27,7 @@ function History() {
   const { data, isLoading } = useQuery({ queryKey: ["invoices", "history"], queryFn: loadInvoices });
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
+  const navigate = useNavigate();
 
   const filtered = (data ?? []).filter((i) => {
     if (status !== "all" && i.status !== status) return false;
