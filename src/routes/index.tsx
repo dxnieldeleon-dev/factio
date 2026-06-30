@@ -23,6 +23,7 @@ function Landing() {
         </div>
         <Link
           to="/auth"
+          search={{ mode: "signin" }}
           className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium hover:bg-accent transition"
         >
           Iniciar sesión
