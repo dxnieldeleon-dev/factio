@@ -23,6 +23,7 @@ function Landing() {
         </div>
         <Link
           to="/auth"
+          search={{ mode: "signin" }}
           className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium hover:bg-accent transition"
         >
           Iniciar sesión
@@ -46,6 +47,7 @@ function Landing() {
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
               to="/auth"
+              search={{ mode: "signup" }}
               className="group inline-flex items-center gap-2 rounded-full bg-foreground px-6 py-3.5 text-sm font-semibold text-background hover:opacity-90 transition"
             >
               Empezar gratis
@@ -53,6 +55,7 @@ function Landing() {
             </Link>
             <Link
               to="/auth"
+              search={{ mode: "signin" }}
               className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-6 py-3.5 text-sm font-semibold hover:bg-accent transition"
             >
               Ya tengo cuenta
