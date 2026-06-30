@@ -2,10 +2,16 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 
+const authSearchSchema = z.object({
+  mode: z.enum(["signin", "signup"]).optional(),
+});
+
 export const Route = createFileRoute("/auth")({
+  validateSearch: authSearchSchema,
   head: () => ({
     meta: [
       { title: "Iniciar sesión — Factura Fácil" },
@@ -17,10 +23,16 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const { mode: modeParam } = Route.useSearch();
+  const [mode, setMode] = useState<"signin" | "signup">(modeParam ?? "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (modeParam && modeParam !== mode) setMode(modeParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modeParam]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
