@@ -86,8 +86,12 @@ function History() {
               const snap = (inv.client_snapshot as { legal_name?: string; rfc?: string } | null) ?? {};
               return (
                 <li key={inv.id} className="rounded-2xl border border-border bg-surface p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => navigate({ to: "/invoices/$id", params: { id: inv.id } })}
+                    className="flex w-full items-start justify-between gap-3 text-left"
+                  >
+                    <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold">{snap.legal_name ?? "Cliente"}</p>
                       <p className="mt-0.5 font-mono text-[10px] uppercase text-muted-foreground">
                         {inv.series}-{String(inv.folio).padStart(6, "0")} · {formatDateMX(inv.created_at)}
@@ -98,7 +102,8 @@ function History() {
                       <p className="font-bold">{formatMXN(inv.total)}</p>
                       <StatusChip status={inv.status} />
                     </div>
-                  </div>
+                    <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" />
+                  </button>
                   <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
                     {inv.pdf_url && (
                       <a
