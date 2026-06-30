@@ -155,7 +155,11 @@ function AuthPage() {
       <p className="mt-6 text-center text-sm text-muted-foreground">
         {mode === "signin" ? "¿Aún no tienes cuenta?" : "¿Ya tienes cuenta?"}{" "}
         <button
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+          onClick={() => {
+            const next = mode === "signin" ? "signup" : "signin";
+            setMode(next);
+            navigate({ to: "/auth", search: { mode: next }, replace: true });
+          }}
           className="font-semibold text-primary hover:underline"
         >
           {mode === "signin" ? "Regístrate" : "Inicia sesión"}
