@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Search, FileText, Download, Share2 } from "lucide-react";
+import { Search, FileText, Download, Share2, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatMXN, formatDateMX } from "@/lib/format";
 import { StatusChip } from "./dashboard";
