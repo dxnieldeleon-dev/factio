@@ -1,11 +1,30 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Search, Plus, Trash2, Check, Loader2, FileCheck2, Download, Share2, Home, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Search, Plus, Trash2, Check, Loader2, FileCheck2, Download, Share2, Home, AlertCircle, Pencil, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatMXN } from "@/lib/format";
-import { CFDI_USES, PAYMENT_FORMS, PAYMENT_METHODS, COMMON_SAT_KEYS, COMMON_SAT_UNITS } from "@/lib/sat-catalogs";
+import {
+  CFDI_USES,
+  PAYMENT_FORMS,
+  PAYMENT_METHODS,
+  COMMON_SAT_KEYS,
+  COMMON_SAT_UNITS,
+  CURRENCIES,
+  EXPORT_CODES,
+  CFDI_TYPES,
+  TAX_REGIMES,
+  cfdiUsesForRegime,
+} from "@/lib/sat-catalogs";
+import {
+  normalizeFiscalName,
+  validateReceiverProfile,
+  validatePayment,
+  hasErrors,
+  type FieldErrors,
+  type ReceiverProfile,
+} from "@/lib/fiscal";
 import { pac } from "@/lib/pac";
 
 export const Route = createFileRoute("/_authenticated/invoices/new")({
@@ -34,11 +53,32 @@ function NewInvoice() {
   const [step, setStep] = useState<Step>(1);
   const [client, setClient] = useState<ClientRow | null>(null);
   const [items, setItems] = useState<LineItem[]>([]);
+
+  // Perfil receptor editable para ESTA factura (arranca desde el cliente).
+  const [receiver, setReceiver] = useState<ReceiverProfile | null>(null);
+  const [saveReceiverEdits, setSaveReceiverEdits] = useState(false);
+
+  // Datos fiscales del comprobante
+  const [cfdiType, setCfdiType] = useState("I");
   const [paymentMethod, setPaymentMethod] = useState("PUE");
   const [paymentForm, setPaymentForm] = useState("03");
-  const [cfdiUse, setCfdiUse] = useState("G03");
+  const [currency, setCurrency] = useState("MXN");
+  const [exchangeRate, setExchangeRate] = useState(1);
+  const [exportCode, setExportCode] = useState("01");
+
   const [issuing, setIssuing] = useState(false);
   const [result, setResult] = useState<{ id: string; series: string; folio: number; uuid: string; xmlUrl: string } | null>(null);
+
+  // Perfil emisor (para reglas de RFC genérico → CP del emisor)
+  const { data: issuer } = useQuery({
+    queryKey: ["company", "issuer"],
+    queryFn: async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return null;
+      const { data } = await supabase.from("companies").select("*").eq("user_id", u.user.id).maybeSingle();
+      return data;
+    },
+  });
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((a, i) => a + (i.quantity * i.unit_price - i.discount), 0);
@@ -46,9 +86,36 @@ function NewInvoice() {
     return { subtotal, ivaTotal, total: subtotal + ivaTotal };
   }, [items]);
 
+  const receiverErrors: FieldErrors = useMemo(() => {
+    if (!receiver) return {};
+    return validateReceiverProfile(receiver, issuer?.postal_code ?? null);
+  }, [receiver, issuer]);
+
+  const paymentError = validatePayment(paymentMethod, paymentForm);
+
+  function pickClient(c: ClientRow) {
+    setClient(c);
+    setReceiver({
+      rfc: c.rfc,
+      legal_name: normalizeFiscalName(c.legal_name),
+      tax_regime: c.tax_regime,
+      postal_code: c.postal_code,
+      cfdi_use: c.cfdi_use ?? "G03",
+    });
+    setSaveReceiverEdits(false);
+    setStep(2);
+  }
+
   async function onIssue() {
-    if (!client) return;
+    if (!client || !receiver) return;
     if (items.length === 0) { toast.error("Agrega al menos un concepto"); return; }
+    if (hasErrors(receiverErrors)) { toast.error("Revisa los datos fiscales del receptor"); return; }
+    if (paymentError) { toast.error(paymentError); return; }
+    if (currency !== "MXN" && (!exchangeRate || exchangeRate <= 0)) {
+      toast.error("Captura el tipo de cambio para la moneda seleccionada");
+      return;
+    }
+
     setIssuing(true);
     try {
       const { data: u } = await supabase.auth.getUser();
@@ -59,54 +126,58 @@ function NewInvoice() {
         return;
       }
 
-      // Calcular folio siguiente
+      // Folio siguiente
       const { data: lastFolio } = await supabase
         .from("invoices").select("folio").eq("user_id", u.user!.id).eq("series", "A")
         .order("folio", { ascending: false }).limit(1).maybeSingle();
       const folio = (lastFolio?.folio ?? 0) + 1;
 
-      // Llamar al PAC stub
       const stamp = await pac.stamp({
         series: "A",
         folio,
         issuerRfc: company.rfc,
-        receiverRfc: client.rfc,
-        receiverName: client.legal_name,
-        receiverTaxRegime: client.tax_regime ?? "",
-        receiverCfdiUse: cfdiUse,
-        receiverPostalCode: client.postal_code ?? "",
+        receiverRfc: receiver.rfc,
+        receiverName: receiver.legal_name,
+        receiverTaxRegime: receiver.tax_regime ?? "",
+        receiverCfdiUse: receiver.cfdi_use ?? "",
+        receiverPostalCode: receiver.postal_code ?? "",
         paymentForm,
         paymentMethod,
-        currency: "MXN",
+        currency,
         items: items.map((i) => ({
           satKey: i.sat_key, satUnit: i.sat_unit, description: i.description,
           quantity: i.quantity, unitPrice: i.unit_price, discount: i.discount, ivaRate: i.iva_rate,
         })),
       });
 
-      if (!stamp.ok) {
-        toast.error(`Error PAC: ${stamp.message}`);
-        return;
-      }
+      if (!stamp.ok) { toast.error(`Error PAC: ${stamp.message}`); return; }
 
       const { data: invoice, error } = await supabase.from("invoices").insert({
         user_id: u.user!.id,
         company_id: company.id,
         client_id: client.id,
-        client_snapshot: { legal_name: client.legal_name, rfc: client.rfc, cfdi_use: cfdiUse, tax_regime: client.tax_regime },
+        client_snapshot: {
+          legal_name: receiver.legal_name,
+          rfc: receiver.rfc,
+          cfdi_use: receiver.cfdi_use,
+          tax_regime: receiver.tax_regime,
+          postal_code: receiver.postal_code,
+        },
         series: "A",
         folio,
         uuid_fiscal: stamp.uuid,
         status: "issued",
         payment_method: paymentMethod,
         payment_form: paymentForm,
-        cfdi_use: cfdiUse,
-        currency: "MXN",
+        cfdi_use: receiver.cfdi_use,
+        currency,
+        exchange_rate: currency === "MXN" ? 1 : exchangeRate,
         subtotal: totals.subtotal,
         iva_total: totals.ivaTotal,
         total: totals.total,
         xml_url: stamp.xmlUrl,
         issued_at: stamp.stampedAt,
+        notes: `cfdi_type=${cfdiType};export=${exportCode}`,
       }).select("id").single();
       if (error) throw error;
 
@@ -126,6 +197,17 @@ function NewInvoice() {
         position: idx,
       }));
       await supabase.from("invoice_items").insert(itemRows);
+
+      // Guardar cambios en el perfil del cliente si el usuario lo pidió
+      if (saveReceiverEdits) {
+        await supabase.from("clients").update({
+          legal_name: receiver.legal_name,
+          tax_regime: receiver.tax_regime,
+          postal_code: receiver.postal_code,
+          cfdi_use: receiver.cfdi_use,
+        }).eq("id", client.id);
+        qc.invalidateQueries({ queryKey: ["clients"] });
+      }
 
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["invoices", "history"] });
@@ -163,7 +245,7 @@ function NewInvoice() {
       </div>
 
       <div className="mt-6">
-        {step === 1 && <StepClient onPick={(c) => { setClient(c); setCfdiUse(c.cfdi_use ?? "G03"); setStep(2); }} />}
+        {step === 1 && <StepClient onPick={pickClient} />}
         {step === 2 && (
           <StepItems
             items={items}
@@ -171,17 +253,30 @@ function NewInvoice() {
             onNext={() => items.length > 0 ? setStep(3) : toast.error("Agrega al menos un concepto")}
           />
         )}
-        {step === 3 && client && (
+        {step === 3 && client && receiver && (
           <StepReview
+            issuer={issuer}
             client={client}
+            receiver={receiver}
+            setReceiver={setReceiver}
+            receiverErrors={receiverErrors}
+            saveReceiverEdits={saveReceiverEdits}
+            setSaveReceiverEdits={setSaveReceiverEdits}
             items={items}
             totals={totals}
+            cfdiType={cfdiType}
+            setCfdiType={setCfdiType}
             paymentMethod={paymentMethod}
             paymentForm={paymentForm}
-            cfdiUse={cfdiUse}
             setPaymentMethod={setPaymentMethod}
             setPaymentForm={setPaymentForm}
-            setCfdiUse={setCfdiUse}
+            paymentError={paymentError}
+            currency={currency}
+            setCurrency={setCurrency}
+            exchangeRate={exchangeRate}
+            setExchangeRate={setExchangeRate}
+            exportCode={exportCode}
+            setExportCode={setExportCode}
             onIssue={onIssue}
             issuing={issuing}
           />
@@ -376,54 +471,200 @@ function StepItems({ items, setItems, onNext }: { items: LineItem[]; setItems: (
   );
 }
 
-function Mini({ label, children }: { label: string; children: React.ReactNode }) {
+function Mini({ label, children, error }: { label: string; children: React.ReactNode; error?: string }) {
   return (
     <label className="block">
       <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
       {children}
+      {error && <span className="mt-1 block text-[10px] font-medium text-destructive">{error}</span>}
     </label>
   );
 }
 
 /* -------- Step 3: Review -------- */
-function StepReview({
-  client, items, totals, paymentMethod, paymentForm, cfdiUse,
-  setPaymentMethod, setPaymentForm, setCfdiUse, onIssue, issuing,
-}: {
-  client: ClientRow; items: LineItem[]; totals: { subtotal: number; ivaTotal: number; total: number };
-  paymentMethod: string; paymentForm: string; cfdiUse: string;
-  setPaymentMethod: (v: string) => void; setPaymentForm: (v: string) => void; setCfdiUse: (v: string) => void;
+type StepReviewProps = {
+  issuer: { rfc?: string; legal_name?: string; postal_code?: string | null; tax_regime?: string | null } | null | undefined;
+  client: ClientRow;
+  receiver: ReceiverProfile;
+  setReceiver: (r: ReceiverProfile) => void;
+  receiverErrors: FieldErrors;
+  saveReceiverEdits: boolean;
+  setSaveReceiverEdits: (v: boolean) => void;
+  items: LineItem[];
+  totals: { subtotal: number; ivaTotal: number; total: number };
+  cfdiType: string; setCfdiType: (v: string) => void;
+  paymentMethod: string; paymentForm: string;
+  setPaymentMethod: (v: string) => void; setPaymentForm: (v: string) => void;
+  paymentError: string | null;
+  currency: string; setCurrency: (v: string) => void;
+  exchangeRate: number; setExchangeRate: (v: number) => void;
+  exportCode: string; setExportCode: (v: string) => void;
   onIssue: () => void; issuing: boolean;
-}) {
-  // Validaciones inteligentes
-  const warnings: string[] = [];
-  if (!client.tax_regime) warnings.push("El cliente no tiene régimen fiscal asignado.");
-  if (!client.postal_code) warnings.push("Falta código postal del receptor.");
-  if (paymentMethod === "PPD" && paymentForm !== "99") warnings.push("Para pagos en parcialidades (PPD) la forma de pago suele ser 99.");
+};
+
+function StepReview(props: StepReviewProps) {
+  const {
+    issuer, client, receiver, setReceiver, receiverErrors,
+    saveReceiverEdits, setSaveReceiverEdits,
+    items, totals,
+    cfdiType, setCfdiType,
+    paymentMethod, paymentForm, setPaymentMethod, setPaymentForm, paymentError,
+    currency, setCurrency, exchangeRate, setExchangeRate,
+    exportCode, setExportCode,
+    onIssue, issuing,
+  } = props;
+
+  const [editReceiver, setEditReceiver] = useState(false);
+  const receiverBlocking = hasErrors(receiverErrors);
+  const allowedUses = useMemo(() => cfdiUsesForRegime(receiver.tax_regime), [receiver.tax_regime]);
+  const isEditedFromClient =
+    receiver.legal_name !== normalizeFiscalName(client.legal_name) ||
+    receiver.tax_regime !== client.tax_regime ||
+    receiver.postal_code !== client.postal_code ||
+    receiver.cfdi_use !== (client.cfdi_use ?? receiver.cfdi_use);
+
+  // Autoabre edición si el perfil viene incompleto
+  useEffect(() => {
+    if (receiverBlocking) setEditReceiver(true);
+  }, [receiverBlocking]);
+
+  function upd<K extends keyof ReceiverProfile>(k: K, v: ReceiverProfile[K]) {
+    const next = { ...receiver, [k]: v };
+    // Si cambia el régimen y el uso ya no aplica, resetea el uso.
+    if (k === "tax_regime") {
+      const allowed = cfdiUsesForRegime(v as string).map((x) => x.code);
+      if (next.cfdi_use && !allowed.includes(next.cfdi_use)) next.cfdi_use = null;
+    }
+    setReceiver(next);
+  }
 
   return (
     <div className="space-y-4">
+      {/* Emisor */}
       <div className="rounded-2xl border border-border bg-surface p-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cliente</p>
-        <p className="mt-1 font-semibold">{client.legal_name}</p>
-        <p className="font-mono text-xs text-muted-foreground">{client.rfc}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Emisor</p>
+        <p className="mt-1 truncate font-semibold">{issuer?.legal_name ?? "Configura tu perfil"}</p>
+        <p className="font-mono text-xs text-muted-foreground">
+          {issuer?.rfc ?? "—"} · CP {issuer?.postal_code ?? "—"} · Régimen {issuer?.tax_regime ?? "—"}
+        </p>
       </div>
 
+      {/* Receptor */}
       <div className="rounded-2xl border border-border bg-surface p-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Datos fiscales</p>
-        <div className="space-y-2">
-          <Mini label="Uso CFDI">
-            <select value={cfdiUse} onChange={(e) => setCfdiUse(e.target.value)} className="ff-mini">
-              {CFDI_USES.map((u) => <option key={u.code} value={u.code}>{u.code} — {u.name}</option>)}
-            </select>
-          </Mini>
-          <div className="grid grid-cols-2 gap-2">
-            <Mini label="Método">
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="ff-mini">
-                {PAYMENT_METHODS.map((m) => <option key={m.code} value={m.code}>{m.code}</option>)}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Receptor</p>
+            <p className="mt-1 truncate font-semibold">{receiver.legal_name || "—"}</p>
+            <p className="font-mono text-xs text-muted-foreground">{receiver.rfc}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditReceiver((v) => !v)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+          >
+            <Pencil className="size-3" /> {editReceiver ? "Ocultar" : "Editar"}
+          </button>
+        </div>
+
+        {!editReceiver && (
+          <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+            <MiniStat label="Régimen" value={receiver.tax_regime ?? "—"} />
+            <MiniStat label="CP" value={receiver.postal_code ?? "—"} />
+            <MiniStat label="Uso CFDI" value={receiver.cfdi_use ?? "—"} />
+          </div>
+        )}
+
+        {editReceiver && (
+          <div className="mt-3 space-y-2.5">
+            <Mini label="Nombre / razón social (como en la constancia)" error={receiverErrors.legal_name}>
+              <input
+                value={receiver.legal_name}
+                onChange={(e) => upd("legal_name", e.target.value)}
+                onBlur={(e) => upd("legal_name", normalizeFiscalName(e.target.value))}
+                className="ff-mini"
+                placeholder="MI EMPRESA EJEMPLO"
+              />
+            </Mini>
+            <div className="grid grid-cols-2 gap-2">
+              <Mini label="Régimen fiscal" error={receiverErrors.tax_regime}>
+                <select value={receiver.tax_regime ?? ""} onChange={(e) => upd("tax_regime", e.target.value || null)} className="ff-mini">
+                  <option value="">Selecciona…</option>
+                  {TAX_REGIMES.map((r) => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+                </select>
+              </Mini>
+              <Mini label="Código postal" error={receiverErrors.postal_code}>
+                <input
+                  value={receiver.postal_code ?? ""}
+                  onChange={(e) => upd("postal_code", e.target.value.replace(/\D/g, "").slice(0, 5))}
+                  inputMode="numeric"
+                  maxLength={5}
+                  className="ff-mini font-mono"
+                  placeholder="00000"
+                />
+              </Mini>
+            </div>
+            <Mini label="Uso CFDI (filtrado por régimen)" error={receiverErrors.cfdi_use}>
+              <select value={receiver.cfdi_use ?? ""} onChange={(e) => upd("cfdi_use", e.target.value || null)} className="ff-mini">
+                <option value="">Selecciona…</option>
+                {(allowedUses.length ? allowedUses : CFDI_USES).map((u) => (
+                  <option key={u.code} value={u.code}>{u.code} — {u.name}</option>
+                ))}
               </select>
             </Mini>
-            <Mini label="Forma de pago">
+
+            {isEditedFromClient && (
+              <label className="mt-1 flex items-center gap-2 rounded-xl bg-primary-soft/60 px-3 py-2 text-[11px]">
+                <input
+                  type="checkbox"
+                  checked={saveReceiverEdits}
+                  onChange={(e) => setSaveReceiverEdits(e.target.checked)}
+                  className="size-4 accent-[var(--primary)]"
+                />
+                <span>
+                  <Save className="mr-1 inline size-3 -mt-0.5" />
+                  Guardar estos cambios en el perfil del cliente
+                </span>
+              </label>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Datos del comprobante */}
+      <div className="rounded-2xl border border-border bg-surface p-4">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Datos del comprobante</p>
+        <div className="space-y-2.5">
+          <div className="grid grid-cols-2 gap-2">
+            <Mini label="Tipo de comprobante">
+              <select value={cfdiType} onChange={(e) => setCfdiType(e.target.value)} className="ff-mini">
+                {CFDI_TYPES.map((t) => <option key={t.code} value={t.code}>{t.code} — {t.name}</option>)}
+              </select>
+            </Mini>
+            <Mini label="Exportación">
+              <select value={exportCode} onChange={(e) => setExportCode(e.target.value)} className="ff-mini">
+                {EXPORT_CODES.map((e2) => <option key={e2.code} value={e2.code}>{e2.code} — {e2.name}</option>)}
+              </select>
+            </Mini>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Mini label="Moneda">
+              <select value={currency} onChange={(e) => { setCurrency(e.target.value); if (e.target.value === "MXN") setExchangeRate(1); }} className="ff-mini">
+                {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}
+              </select>
+            </Mini>
+            {currency !== "MXN" && (
+              <Mini label={`T. cambio ${currency}→MXN`}>
+                <input type="number" min="0" step="0.0001" value={exchangeRate} onChange={(e) => setExchangeRate(Number(e.target.value))} className="ff-mini font-mono" />
+              </Mini>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Mini label="Método" error={paymentError && paymentMethod === "PPD" ? paymentError : undefined}>
+              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="ff-mini">
+                {PAYMENT_METHODS.map((m) => <option key={m.code} value={m.code}>{m.code} — {m.name}</option>)}
+              </select>
+            </Mini>
+            <Mini label="Forma de pago" error={paymentError && paymentMethod !== "PPD" ? paymentError : undefined}>
               <select value={paymentForm} onChange={(e) => setPaymentForm(e.target.value)} className="ff-mini">
                 {PAYMENT_FORMS.map((f) => <option key={f.code} value={f.code}>{f.code} — {f.name}</option>)}
               </select>
@@ -432,19 +673,9 @@ function StepReview({
         </div>
       </div>
 
-      {warnings.length > 0 && (
-        <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-warning-foreground">
-            <AlertCircle className="size-4 text-warning" /> Revisa antes de timbrar
-          </div>
-          <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-            {warnings.map((w) => <li key={w}>• {w}</li>)}
-          </ul>
-        </div>
-      )}
-
+      {/* Conceptos + totales */}
       <div className="rounded-2xl border border-border bg-surface p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conceptos ({items.length})</p>
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Conceptos ({items.length})</p>
         <ul className="divide-y divide-border">
           {items.map((it, i) => (
             <li key={i} className="flex items-center justify-between gap-2 py-2 text-sm">
@@ -460,10 +691,17 @@ function StepReview({
         </div>
       </div>
 
+      {(receiverBlocking || paymentError) && (
+        <div className="flex items-start gap-2 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          <span>Corrige los campos marcados en rojo antes de emitir.</span>
+        </div>
+      )}
+
       <button
         onClick={onIssue}
-        disabled={issuing}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-60"
+        disabled={issuing || receiverBlocking || !!paymentError}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-50"
       >
         {issuing ? <Loader2 className="size-4 animate-spin" /> : <>Emitir factura <Check className="size-4" /></>}
       </button>
@@ -471,7 +709,16 @@ function StepReview({
         Conexión con PAC en modo demo · Configura tu PAC en producción.
       </p>
 
-      <style>{`.ff-mini{width:100%;border-radius:0.75rem;border:1px solid var(--input);background:var(--background);padding:0.5rem 0.625rem;font-size:0.8rem;outline:none}.ff-mini:focus{border-color:var(--primary)}`}</style>
+      <style>{`.ff-mini{width:100%;border-radius:0.75rem;border:1px solid var(--input);background:var(--background);padding:0.5rem 0.625rem;font-size:0.8rem;outline:none}.ff-mini:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--ring)}`}</style>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-background px-2.5 py-1.5">
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="font-mono text-xs font-semibold">{value}</p>
     </div>
   );
 }
