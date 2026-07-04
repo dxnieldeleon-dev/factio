@@ -117,6 +117,7 @@ export type Database = {
           is_default: boolean
           legal_name: string
           logo_url: string | null
+          onboarding_completed: boolean
           phone: string | null
           postal_code: string | null
           rfc: string
@@ -139,6 +140,7 @@ export type Database = {
           is_default?: boolean
           legal_name: string
           logo_url?: string | null
+          onboarding_completed?: boolean
           phone?: string | null
           postal_code?: string | null
           rfc: string
@@ -161,6 +163,7 @@ export type Database = {
           is_default?: boolean
           legal_name?: string
           logo_url?: string | null
+          onboarding_completed?: boolean
           phone?: string | null
           postal_code?: string | null
           rfc?: string
