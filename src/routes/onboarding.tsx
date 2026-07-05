@@ -361,6 +361,13 @@ function StepTwoPlaceholder() {
           </button>
           <button
             type="button"
+            onClick={() => navigate({ to: "/dashboard", replace: true })}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-[#C2E8FF]/30 bg-[#C2E8FF]/10 px-6 py-3 text-sm font-semibold text-[#C2E8FF] transition hover:bg-[#C2E8FF]/20"
+          >
+            <ArrowRight className="size-4" /> Omitir por ahora
+          </button>
+          <button
+            type="button"
             onClick={async () => {
               await supabase.auth.signOut();
               navigate({ to: "/auth", replace: true });
