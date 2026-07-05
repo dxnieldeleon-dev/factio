@@ -63,6 +63,15 @@ async function loadDashboard(): Promise<DashboardData> {
 function Dashboard() {
   const navigate = useNavigate();
   const { data, isLoading } = useQuery({ queryKey: ["dashboard"], queryFn: loadDashboard });
+  const [csdDismissed, setCsdDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("ff.csdBannerDismissed") === "1";
+  });
+  function dismissCsd() {
+    setCsdDismissed(true);
+    try { window.localStorage.setItem("ff.csdBannerDismissed", "1"); } catch {}
+  }
+
 
   async function onSignOut() {
     await supabase.auth.signOut();
