@@ -1,7 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Bell, TrendingUp, Users as UsersIcon, FileText, LogOut, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { Plus, Bell, TrendingUp, Users as UsersIcon, FileText, LogOut, ChevronRight, ShieldAlert, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+
 import { formatMXN, formatDateMX } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
