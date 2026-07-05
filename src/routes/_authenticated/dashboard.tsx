@@ -111,6 +111,36 @@ function Dashboard() {
         </div>
       </header>
 
+      {data && !data.csdReady && !csdDismissed && (
+        <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-amber-900 shadow-soft animate-reveal">
+          <ShieldAlert className="mt-0.5 size-5 shrink-0" strokeWidth={1.8} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Completa la configuración de tu CSD</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-amber-900/80">
+              Necesitas cargar tu Certificado de Sello Digital para poder timbrar facturas ante el SAT.
+            </p>
+            <button
+              type="button"
+              disabled
+              className="mt-2 inline-flex cursor-not-allowed items-center gap-1 rounded-full bg-amber-900/10 px-3 py-1 text-[11px] font-semibold text-amber-900/70"
+              title="Disponible próximamente"
+            >
+              Configurar CSD · próximamente
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={dismissCsd}
+            aria-label="Descartar aviso"
+            className="grid size-7 shrink-0 place-items-center rounded-full text-amber-900/70 transition hover:bg-amber-900/10"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
+
+
       <section className="mt-6 grid grid-cols-2 gap-3 animate-reveal">
         <div className="col-span-2 rounded-3xl border border-border bg-surface p-5 shadow-soft">
           <p className="text-sm text-muted-foreground">Facturación del mes</p>
