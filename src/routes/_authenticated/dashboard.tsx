@@ -22,7 +22,9 @@ interface DashboardData {
     client_snapshot: { legal_name?: string } | null;
   }>;
   businessName: string;
+  csdReady: boolean;
 }
+
 
 async function loadDashboard(): Promise<DashboardData> {
   const { data: userData } = await supabase.auth.getUser();
