@@ -125,6 +125,11 @@ function NewInvoice() {
         navigate({ to: "/profile" });
         return;
       }
+      if (!company.csd_cer_url || !company.csd_key_url || !company.csd_password_encrypted) {
+        toast.error("Configura tu Certificado de Sello Digital (CSD) antes de timbrar.");
+        return;
+      }
+
 
       // Folio siguiente
       const { data: lastFolio } = await supabase

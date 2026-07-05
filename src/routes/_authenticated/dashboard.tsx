@@ -1,7 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Bell, TrendingUp, Users as UsersIcon, FileText, LogOut, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { Plus, Bell, TrendingUp, Users as UsersIcon, FileText, LogOut, ChevronRight, ShieldAlert, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+
 import { formatMXN, formatDateMX } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -22,7 +24,9 @@ interface DashboardData {
     client_snapshot: { legal_name?: string } | null;
   }>;
   businessName: string;
+  csdReady: boolean;
 }
+
 
 async function loadDashboard(): Promise<DashboardData> {
   const { data: userData } = await supabase.auth.getUser();
@@ -34,7 +38,7 @@ async function loadDashboard(): Promise<DashboardData> {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   const [companyRes, todayRes, monthRes, clientsRes, recentRes] = await Promise.all([
-    supabase.from("companies").select("trade_name, legal_name").eq("user_id", userId!).limit(1).maybeSingle(),
+    supabase.from("companies").select("trade_name, legal_name, csd_cer_url, csd_key_url, csd_password_encrypted").eq("user_id", userId!).limit(1).maybeSingle(),
     supabase.from("invoices").select("id", { count: "exact", head: true }).eq("status", "issued").gte("created_at", startOfDay),
     supabase.from("invoices").select("total").eq("status", "issued").gte("created_at", startOfMonth),
     supabase.from("clients").select("id", { count: "exact", head: true }),
@@ -42,19 +46,32 @@ async function loadDashboard(): Promise<DashboardData> {
   ]);
 
   const monthTotal = (monthRes.data ?? []).reduce((a, r) => a + Number(r.total ?? 0), 0);
+  const c = companyRes.data;
+  const csdReady = !!(c?.csd_cer_url && c?.csd_key_url && c?.csd_password_encrypted);
 
   return {
     todayCount: todayRes.count ?? 0,
     monthTotal,
     clientsCount: clientsRes.count ?? 0,
     recent: (recentRes.data as DashboardData["recent"]) ?? [],
-    businessName: companyRes.data?.trade_name || companyRes.data?.legal_name || email.split("@")[0] || "Mi negocio",
+    businessName: c?.trade_name || c?.legal_name || email.split("@")[0] || "Mi negocio",
+    csdReady,
   };
+
 }
 
 function Dashboard() {
   const navigate = useNavigate();
   const { data, isLoading } = useQuery({ queryKey: ["dashboard"], queryFn: loadDashboard });
+  const [csdDismissed, setCsdDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("ff.csdBannerDismissed") === "1";
+  });
+  function dismissCsd() {
+    setCsdDismissed(true);
+    try { window.localStorage.setItem("ff.csdBannerDismissed", "1"); } catch {}
+  }
+
 
   async function onSignOut() {
     await supabase.auth.signOut();
@@ -93,6 +110,36 @@ function Dashboard() {
           </button>
         </div>
       </header>
+
+      {data && !data.csdReady && !csdDismissed && (
+        <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-amber-900 shadow-soft animate-reveal">
+          <ShieldAlert className="mt-0.5 size-5 shrink-0" strokeWidth={1.8} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Completa la configuración de tu CSD</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-amber-900/80">
+              Necesitas cargar tu Certificado de Sello Digital para poder timbrar facturas ante el SAT.
+            </p>
+            <button
+              type="button"
+              disabled
+              className="mt-2 inline-flex cursor-not-allowed items-center gap-1 rounded-full bg-amber-900/10 px-3 py-1 text-[11px] font-semibold text-amber-900/70"
+              title="Disponible próximamente"
+            >
+              Configurar CSD · próximamente
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={dismissCsd}
+            aria-label="Descartar aviso"
+            className="grid size-7 shrink-0 place-items-center rounded-full text-amber-900/70 transition hover:bg-amber-900/10"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
+
 
       <section className="mt-6 grid grid-cols-2 gap-3 animate-reveal">
         <div className="col-span-2 rounded-3xl border border-border bg-surface p-5 shadow-soft">
