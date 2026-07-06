@@ -329,56 +329,271 @@ function OnboardingPage() {
             </div>
           </div>
         ) : (
-          <StepTwoPlaceholder />
+          <StepTwoCsd companyId={companyId} userId={userId} />
         )}
       </div>
     </div>
   );
 }
 
-function StepTwoPlaceholder() {
+type CsdErrors = Partial<Record<"cer" | "key" | "password", string>>;
+
+function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: string | null }) {
   const navigate = useNavigate();
+  const [cerFile, setCerFile] = useState<File | null>(null);
+  const [keyFile, setKeyFile] = useState<File | null>(null);
+  const [password, setPassword] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
+  const [errors, setErrors] = useState<CsdErrors>({});
+  const [validating, setValidating] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  function pickFile(kind: "cer" | "key") {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      const f = e.target.files?.[0] ?? null;
+      setErrors((prev) => ({ ...prev, [kind]: undefined }));
+      if (!f) {
+        kind === "cer" ? setCerFile(null) : setKeyFile(null);
+        return;
+      }
+      if (f.size > 512 * 1024) {
+        setErrors((prev) => ({ ...prev, [kind]: `El archivo .${kind} es demasiado grande (máx 512 KB).` }));
+        return;
+      }
+      const ext = f.name.split(".").pop()?.toLowerCase();
+      if (kind === "cer" && ext !== "cer") {
+        setErrors((prev) => ({ ...prev, cer: "Selecciona el archivo con extensión .cer del SAT." }));
+        return;
+      }
+      if (kind === "key" && ext !== "key") {
+        setErrors((prev) => ({ ...prev, key: "Selecciona el archivo con extensión .key del SAT." }));
+        return;
+      }
+      kind === "cer" ? setCerFile(f) : setKeyFile(f);
+    };
+  }
+
+  async function fileToBase64(f: File): Promise<string> {
+    const buf = await f.arrayBuffer();
+    let binary = "";
+    const bytes = new Uint8Array(buf);
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+    }
+    return btoa(binary);
+  }
+
+  async function onValidateAndSave() {
+    const nextErrors: CsdErrors = {};
+    if (!cerFile) nextErrors.cer = "Sube tu archivo .cer.";
+    if (!keyFile) nextErrors.key = "Sube tu archivo .key.";
+    if (!password.trim()) nextErrors.password = "Escribe la contraseña de tu llave privada.";
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+    if (!userId || !companyId) {
+      toast.error("Sesión no válida. Vuelve a iniciar sesión.");
+      return;
+    }
+
+    setValidating(true);
+    try {
+      const [cer_base64, key_base64] = await Promise.all([fileToBase64(cerFile!), fileToBase64(keyFile!)]);
+      const { data, error } = await supabase.functions.invoke("validate-csd", {
+        body: { cer_base64, key_base64, password },
+      });
+      if (error) throw new Error(error.message || "No pudimos validar el CSD.");
+      const res = data as {
+        valid: boolean;
+        reason?: string;
+        field?: "cer" | "key" | "password";
+        serial_number?: string;
+        valid_from?: string;
+        valid_to?: string;
+      };
+      if (!res?.valid) {
+        const field = res?.field ?? "cer";
+        setErrors({ [field]: res?.reason ?? "El certificado no es válido." });
+        toast.error(res?.reason ?? "El certificado no es válido.");
+        return;
+      }
+
+      // Validación OK → subir archivos y guardar metadata
+      setValidating(false);
+      setSaving(true);
+
+      const stamp = Date.now();
+      const cerPath = `${userId}/${stamp}.cer`;
+      const keyPath = `${userId}/${stamp}.key`;
+
+      const [cerUp, keyUp] = await Promise.all([
+        supabase.storage.from("csd-files").upload(cerPath, cerFile!, {
+          upsert: true,
+          contentType: "application/pkix-cert",
+        }),
+        supabase.storage.from("csd-files").upload(keyPath, keyFile!, {
+          upsert: true,
+          contentType: "application/pkcs8",
+        }),
+      ]);
+      if (cerUp.error) throw cerUp.error;
+      if (keyUp.error) throw keyUp.error;
+
+      const { error: updErr } = await supabase
+        .from("companies")
+        .update({
+          csd_cer_url: cerPath,
+          csd_key_url: keyPath,
+          csd_serial_number: res.serial_number ?? null,
+          csd_valid_from: res.valid_from ?? null,
+          csd_valid_to: res.valid_to ?? null,
+          onboarding_completed: true,
+        })
+        .eq("id", companyId);
+      if (updErr) throw updErr;
+
+      // Limpiar aviso persistente del dashboard
+      try {
+        window.localStorage.removeItem("ff.csdBannerDismissed");
+      } catch {
+        // ignore
+      }
+
+      toast.success("Certificado validado y guardado correctamente.");
+      navigate({ to: "/dashboard", replace: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error validando el CSD.";
+      toast.error(msg);
+    } finally {
+      setValidating(false);
+      setSaving(false);
+    }
+  }
+
+  const busy = validating || saving;
+
   return (
-    <div className="rounded-3xl bg-background p-8 shadow-2xl">
-      <div className="mx-auto max-w-md text-center">
-        <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#C2E8FF] text-[#011025]">
-          <Lock className="size-7" />
+    <div className="rounded-3xl bg-background p-6 shadow-2xl sm:p-8">
+      <div className="flex items-start gap-3">
+        <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#C2E8FF] text-[#011025]">
+          <Lock className="size-5" />
         </div>
-        <h2 className="mt-5 text-xl font-semibold tracking-tight">Paso 2 · Certificado de Sello Digital</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Tus datos fiscales quedaron guardados. En el siguiente paso subirás tu CSD (.cer y .key) y la contraseña de la llave privada para poder timbrar tus CFDI ante el SAT.
-        </p>
-        <div className="mt-6 rounded-2xl border border-dashed border-input bg-muted/40 p-4 text-xs text-muted-foreground">
-          Disponible próximamente. Puedes cerrar sesión y volver más tarde para completarlo.
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold tracking-tight">Paso 2 · Certificado de Sello Digital (CSD)</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Sube tu archivo <strong>.cer</strong> y tu llave privada <strong>.key</strong> junto con su contraseña. Los validamos antes de guardarlos y nunca almacenamos la contraseña.
+          </p>
         </div>
-        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+      </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <CsdFileField
+          label="Archivo .cer"
+          accept=".cer,application/pkix-cert"
+          file={cerFile}
+          onChange={pickFile("cer")}
+          error={errors.cer}
+        />
+        <CsdFileField
+          label="Archivo .key"
+          accept=".key"
+          file={keyFile}
+          onChange={pickFile("key")}
+          error={errors.key}
+        />
+        <label className="block sm:col-span-2">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Contraseña de la llave privada <span className="text-destructive">*</span>
+          </span>
+          <div className="relative">
+            <input
+              type={showPwd ? "text" : "password"}
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+              }}
+              placeholder="La que capturaste al generar el CSD"
+              autoComplete="off"
+              className={inputCls(!!errors.password) + " pr-20"}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPwd((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-accent"
+            >
+              {showPwd ? "Ocultar" : "Mostrar"}
+            </button>
+          </div>
+          {errors.password && (
+            <span className="mt-1 block text-[11px] font-medium text-destructive">{errors.password}</span>
+          )}
+          <span className="mt-1 block text-[11px] text-muted-foreground">
+            Nunca guardamos tu contraseña. Se usa solo en el servidor para validar la llave y se descarta al terminar.
+          </span>
+        </label>
+      </div>
+
+      <div className="mt-8 flex flex-col-reverse items-stretch justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            disabled
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#011025] px-6 py-3 text-sm font-semibold text-[#C2E8FF] opacity-50"
-          >
-            <Lock className="size-4" /> Cargar CSD (próximamente)
-          </button>
-          <button
-            type="button"
+            disabled={busy}
             onClick={() => navigate({ to: "/dashboard", replace: true })}
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-[#C2E8FF]/30 bg-[#C2E8FF]/10 px-6 py-3 text-sm font-semibold text-[#C2E8FF] transition hover:bg-[#C2E8FF]/20"
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-input bg-background px-5 py-2.5 text-xs font-semibold text-foreground transition hover:bg-accent disabled:opacity-50"
           >
             <ArrowRight className="size-4" /> Omitir por ahora
           </button>
-          <button
-            type="button"
-            onClick={async () => {
-              await supabase.auth.signOut();
-              navigate({ to: "/auth", replace: true });
-            }}
-            className="inline-flex items-center justify-center rounded-full border border-input bg-background px-6 py-3 text-sm font-medium hover:bg-accent"
-          >
-            Cerrar sesión
-          </button>
         </div>
+        <button
+          type="button"
+          onClick={onValidateAndSave}
+          disabled={busy}
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-[#011025] px-6 py-3 text-sm font-semibold text-[#C2E8FF] shadow-lg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+          {validating ? "Validando certificado…" : saving ? "Guardando…" : "Validar y guardar CSD"}
+        </button>
       </div>
     </div>
+  );
+}
+
+function CsdFileField({
+  label,
+  accept,
+  file,
+  onChange,
+  error,
+}: {
+  label: string;
+  accept: string;
+  file: File | null;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  error?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label} <span className="text-destructive">*</span>
+      </span>
+      <div
+        className={`flex items-center gap-3 rounded-xl border bg-background px-3 py-2.5 text-sm transition ${
+          error ? "border-destructive" : "border-input"
+        }`}
+      >
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-3 py-1.5 text-xs font-semibold hover:bg-accent">
+          <Upload className="size-4" />
+          {file ? "Cambiar" : "Elegir archivo"}
+          <input type="file" accept={accept} className="hidden" onChange={onChange} />
+        </label>
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          {file ? file.name : "Ningún archivo seleccionado"}
+        </span>
+        {file && !error && <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />}
+      </div>
+      {error && <span className="mt-1 block text-[11px] font-medium text-destructive">{error}</span>}
+    </label>
   );
 }
 
