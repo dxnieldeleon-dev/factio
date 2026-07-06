@@ -38,7 +38,7 @@ async function loadDashboard(): Promise<DashboardData> {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   const [companyRes, todayRes, monthRes, clientsRes, recentRes] = await Promise.all([
-    supabase.from("companies").select("trade_name, legal_name, csd_cer_url, csd_key_url, csd_password_encrypted").eq("user_id", userId!).limit(1).maybeSingle(),
+    supabase.from("companies").select("trade_name, legal_name, csd_cer_url, csd_key_url, csd_serial_number, csd_valid_to").eq("user_id", userId!).limit(1).maybeSingle(),
     supabase.from("invoices").select("id", { count: "exact", head: true }).eq("status", "issued").gte("created_at", startOfDay),
     supabase.from("invoices").select("total").eq("status", "issued").gte("created_at", startOfMonth),
     supabase.from("clients").select("id", { count: "exact", head: true }),
@@ -47,7 +47,7 @@ async function loadDashboard(): Promise<DashboardData> {
 
   const monthTotal = (monthRes.data ?? []).reduce((a, r) => a + Number(r.total ?? 0), 0);
   const c = companyRes.data;
-  const csdReady = !!(c?.csd_cer_url && c?.csd_key_url && c?.csd_password_encrypted);
+  const csdReady = !!(c?.csd_cer_url && c?.csd_key_url && c?.csd_serial_number && c?.csd_valid_to && new Date(c.csd_valid_to) > new Date());
 
   return {
     todayCount: todayRes.count ?? 0,
