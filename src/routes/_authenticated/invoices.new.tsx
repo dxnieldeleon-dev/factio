@@ -125,8 +125,12 @@ function NewInvoice() {
         navigate({ to: "/profile" });
         return;
       }
-      if (!company.csd_cer_url || !company.csd_key_url || !company.csd_password_encrypted) {
+      if (!company.csd_cer_url || !company.csd_key_url || !company.csd_serial_number) {
         toast.error("Configura tu Certificado de Sello Digital (CSD) antes de timbrar.");
+        return;
+      }
+      if (company.csd_valid_to && new Date(company.csd_valid_to) < new Date()) {
+        toast.error("Tu CSD venció. Sube uno vigente antes de timbrar.");
         return;
       }
 

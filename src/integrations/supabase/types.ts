@@ -112,6 +112,9 @@ export type Database = {
           csd_cer_url: string | null
           csd_key_url: string | null
           csd_password_encrypted: string | null
+          csd_serial_number: string | null
+          csd_valid_from: string | null
+          csd_valid_to: string | null
           email: string | null
           id: string
           is_default: boolean
@@ -135,6 +138,9 @@ export type Database = {
           csd_cer_url?: string | null
           csd_key_url?: string | null
           csd_password_encrypted?: string | null
+          csd_serial_number?: string | null
+          csd_valid_from?: string | null
+          csd_valid_to?: string | null
           email?: string | null
           id?: string
           is_default?: boolean
@@ -158,6 +164,9 @@ export type Database = {
           csd_cer_url?: string | null
           csd_key_url?: string | null
           csd_password_encrypted?: string | null
+          csd_serial_number?: string | null
+          csd_valid_from?: string | null
+          csd_valid_to?: string | null
           email?: string | null
           id?: string
           is_default?: boolean
