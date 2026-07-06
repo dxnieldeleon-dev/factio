@@ -121,11 +121,10 @@ function Dashboard() {
             </p>
             <button
               type="button"
-              disabled
-              className="mt-2 inline-flex cursor-not-allowed items-center gap-1 rounded-full bg-amber-900/10 px-3 py-1 text-[11px] font-semibold text-amber-900/70"
-              title="Disponible próximamente"
+              onClick={() => navigate({ to: "/onboarding" })}
+              className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-900 px-3 py-1 text-[11px] font-semibold text-amber-50 transition hover:bg-amber-950"
             >
-              Configurar CSD · próximamente
+              Configurar CSD ahora
             </button>
           </div>
           <button
