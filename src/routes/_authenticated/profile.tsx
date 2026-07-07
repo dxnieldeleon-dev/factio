@@ -28,6 +28,7 @@ function Profile() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["profile"], queryFn: loadProfile });
+  const saveCsdPasswordFn = useServerFn(saveCsdPassword);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<{
     legal_name: string; trade_name: string; rfc: string; tax_regime: string;
