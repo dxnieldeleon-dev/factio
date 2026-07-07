@@ -373,17 +373,6 @@ function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: s
     };
   }
 
-  async function fileToBase64(f: File): Promise<string> {
-    const buf = await f.arrayBuffer();
-    let binary = "";
-    const bytes = new Uint8Array(buf);
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
-    }
-    return btoa(binary);
-  }
-
   async function onValidateAndSave() {
     const nextErrors: CsdErrors = {};
     if (!cerFile) nextErrors.cer = "Sube tu archivo .cer.";
@@ -396,35 +385,11 @@ function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: s
       return;
     }
 
-    setValidating(true);
+    setSaving(true);
     try {
-      const [cer_base64, key_base64] = await Promise.all([fileToBase64(cerFile!), fileToBase64(keyFile!)]);
-      const { data, error } = await supabase.functions.invoke("validate-csd", {
-        body: { cer_base64, key_base64, password },
-      });
-      if (error) throw new Error(error.message || "No pudimos validar el CSD.");
-      const res = data as {
-        valid: boolean;
-        reason?: string;
-        field?: "cer" | "key" | "password";
-        serial_number?: string;
-        valid_from?: string;
-        valid_to?: string;
-      };
-      if (!res?.valid) {
-        const field = res?.field ?? "cer";
-        setErrors({ [field]: res?.reason ?? "El certificado no es válido." });
-        toast.error(res?.reason ?? "El certificado no es válido.");
-        return;
-      }
-
-      // Validación OK → subir archivos y guardar metadata
-      setValidating(false);
-      setSaving(true);
-
-      const stamp = Date.now();
-      const cerPath = `${userId}/${stamp}.cer`;
-      const keyPath = `${userId}/${stamp}.key`;
+      // 1) Subir archivos al bucket privado csd-files en rutas deterministas
+      const cerPath = `${userId}/${companyId}/cert.cer`;
+      const keyPath = `${userId}/${companyId}/key.key`;
 
       const [cerUp, keyUp] = await Promise.all([
         supabase.storage.from("csd-files").upload(cerPath, cerFile!, {
@@ -439,20 +404,37 @@ function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: s
       if (cerUp.error) throw cerUp.error;
       if (keyUp.error) throw keyUp.error;
 
-      const { error: updErr } = await supabase
+      // 2) Guardar rutas en companies
+      const { error: pathErr } = await supabase
         .from("companies")
-        .update({
-          csd_cer_url: cerPath,
-          csd_key_url: keyPath,
-          csd_serial_number: res.serial_number ?? null,
-          csd_valid_from: res.valid_from ?? null,
-          csd_valid_to: res.valid_to ?? null,
-          onboarding_completed: true,
-        })
+        .update({ csd_cer_url: cerPath, csd_key_url: keyPath })
         .eq("id", companyId);
-      if (updErr) throw updErr;
+      if (pathErr) throw pathErr;
 
-      // Limpiar aviso persistente del dashboard
+      // 3) Validar en servidor vía Edge Function (nunca guardamos la contraseña)
+      setSaving(false);
+      setValidating(true);
+
+      const { data, error } = await supabase.functions.invoke("validar-csd", {
+        body: { company_id: companyId, password },
+      });
+      if (error) throw new Error(error.message || "No pudimos validar el CSD.");
+
+      const res = data as {
+        success: boolean;
+        error?: string;
+        field?: "cer" | "key" | "password";
+      };
+
+      if (!res?.success) {
+        const field = res?.field ?? "password";
+        const msg = res?.error ?? "El certificado no es válido.";
+        setErrors({ [field]: msg });
+        toast.error(msg);
+        return;
+      }
+
+      // Éxito → limpiar aviso persistente del dashboard y avanzar
       try {
         window.localStorage.removeItem("ff.csdBannerDismissed");
       } catch {
@@ -469,6 +451,7 @@ function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: s
       setSaving(false);
     }
   }
+
 
   const busy = validating || saving;
 
