@@ -4,10 +4,10 @@ import { ArrowRight, Sparkles, ShieldCheck, Zap } from "lucide-react";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Factura Fácil — Facturación CFDI 4.0 en menos de 60 segundos" },
+      { title: "Factio — Facturación CFDI 4.0 en menos de 60 segundos" },
       { name: "description", content: "La forma más sencilla de emitir facturas electrónicas en México. Para freelancers, profesionistas y pequeñas empresas." },
-      { property: "og:title", content: "Factura Fácil" },
-      { property: "og:description", content: "Factura CFDI 4.0 desde tu celular en menos de 60 segundos." },
+      { property: "og:title", content: "Factio — Facturación CFDI 4.0 en menos de 60 segundos" },
+      { property: "og:description", content: "La forma más sencilla de emitir facturas electrónicas en México. Para freelancers, profesionistas y pequeñas empresas." },
     ],
   }),
   component: Landing,
