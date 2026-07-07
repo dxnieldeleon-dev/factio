@@ -55,7 +55,7 @@ function Profile() {
     setSavingCsd(true);
     try {
       const userId = data.user.id;
-      const updates: { csd_cer_url?: string; csd_key_url?: string; csd_password_encrypted?: string } = {};
+      const updates: { csd_cer_url?: string; csd_key_url?: string } = {};
       if (cerFile) {
         const path = `${userId}/cert.cer`;
         const { error } = await supabase.storage.from("csd-files").upload(path, cerFile, { upsert: true });
@@ -68,12 +68,12 @@ function Profile() {
         if (error) throw error;
         updates.csd_key_url = path;
       }
-      if (csdPassword.length > 0) {
-        updates.csd_password_encrypted = csdPassword;
-      }
       if (Object.keys(updates).length > 0) {
         const { error } = await supabase.from("companies").update(updates).eq("id", data.company.id);
         if (error) throw error;
+      }
+      if (csdPassword.length > 0) {
+        await saveCsdPasswordFn({ data: { companyId: data.company.id, password: csdPassword } });
       }
       toast.success("CSD guardado correctamente");
       setCerFile(null);
