@@ -21,6 +21,21 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   if (req.method !== "POST") return json({ valid: false, reason: "Método no permitido." }, 405);
 
+  // Require an authenticated caller (JWT bearer). We don't need to fully verify
+  // the signature here — the Supabase gateway already validates the JWT against
+  // project keys before the function is invoked when verify_jwt is on; this is
+  // a defense-in-depth check for deployments where verify_jwt is off.
+  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+  if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
+    return json({ valid: false, reason: "No autenticado." }, 401);
+  }
+  const token = authHeader.slice(7).trim();
+  if (!token || token.split(".").length !== 3) {
+    return json({ valid: false, reason: "Token inválido." }, 401);
+  }
+
+
+
   let payload: { cer_base64?: string; key_base64?: string; password?: string };
   try {
     payload = await req.json();

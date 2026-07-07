@@ -1,11 +1,14 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { LogOut, Building2, Settings, Loader2, ShieldCheck, Eye, EyeOff, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { TAX_REGIMES } from "@/lib/sat-catalogs";
 import { validateRFC } from "@/lib/format";
+import { saveCsdPassword } from "@/lib/csd.functions";
+
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: Profile,
@@ -25,6 +28,7 @@ function Profile() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["profile"], queryFn: loadProfile });
+  const saveCsdPasswordFn = useServerFn(saveCsdPassword);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<{
     legal_name: string; trade_name: string; rfc: string; tax_regime: string;
@@ -51,7 +55,7 @@ function Profile() {
     setSavingCsd(true);
     try {
       const userId = data.user.id;
-      const updates: { csd_cer_url?: string; csd_key_url?: string; csd_password_encrypted?: string } = {};
+      const updates: { csd_cer_url?: string; csd_key_url?: string } = {};
       if (cerFile) {
         const path = `${userId}/cert.cer`;
         const { error } = await supabase.storage.from("csd-files").upload(path, cerFile, { upsert: true });
@@ -64,12 +68,12 @@ function Profile() {
         if (error) throw error;
         updates.csd_key_url = path;
       }
-      if (csdPassword.length > 0) {
-        updates.csd_password_encrypted = csdPassword;
-      }
       if (Object.keys(updates).length > 0) {
         const { error } = await supabase.from("companies").update(updates).eq("id", data.company.id);
         if (error) throw error;
+      }
+      if (csdPassword.length > 0) {
+        await saveCsdPasswordFn({ data: { companyId: data.company.id, password: csdPassword } });
       }
       toast.success("CSD guardado correctamente");
       setCerFile(null);
