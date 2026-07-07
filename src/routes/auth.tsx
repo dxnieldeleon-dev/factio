@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
+
 
 const authSearchSchema = z.object({
   mode: z.enum(["signin", "signup"]).optional(),
