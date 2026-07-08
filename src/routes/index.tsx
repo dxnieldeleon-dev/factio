@@ -22,13 +22,6 @@ function Landing() {
           <img src={factioLogo.url} alt="Factio" className="size-8 rounded-lg" />
           <span className="font-semibold tracking-tight">Factio</span>
         </div>
-        <Link
-          to="/auth"
-          search={{ mode: "signin" }}
-          className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium hover:bg-accent transition"
-        >
-          Iniciar sesión
-        </Link>
       </header>
 
       <main className="mx-auto max-w-5xl px-5 pt-16 pb-24">
