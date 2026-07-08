@@ -14,8 +14,8 @@ export const Route = createFileRoute("/auth")({
   validateSearch: authSearchSchema,
   head: () => ({
     meta: [
-      { title: "Iniciar sesión — Factura Fácil" },
-      { name: "description", content: "Accede a tu cuenta de Factura Fácil para emitir CFDI 4.0." },
+      { title: "Iniciar sesión — Factio" },
+      { name: "description", content: "Accede a tu cuenta de Factio para emitir CFDI 4.0." },
     ],
   }),
   component: AuthPage,
@@ -51,7 +51,7 @@ function AuthPage() {
           options: { emailRedirectTo: window.location.origin + "/dashboard" },
         });
         if (error) throw error;
-        toast.success("Cuenta creada. Bienvenido a Factura Fácil.");
+        toast.success("Cuenta creada. Bienvenido a Factio.");
         navigate({ to: "/dashboard", replace: true });
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -84,7 +84,7 @@ function AuthPage() {
       <div className="animate-reveal">
         <div className="flex items-center gap-2">
           <div className="grid size-9 place-items-center rounded-xl bg-foreground text-background font-bold">F</div>
-          <span className="font-semibold tracking-tight">Factura Fácil</span>
+          <span className="font-semibold tracking-tight">Factio</span>
         </div>
         <h1 className="mt-8 text-3xl font-bold tracking-tight">
           {mode === "signin" ? "Bienvenido de vuelta" : "Crea tu cuenta"}

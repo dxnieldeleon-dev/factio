@@ -14,7 +14,7 @@ export const Route = createFileRoute("/onboarding")({
     return { user: data.user };
   },
   head: () => ({
-    meta: [{ title: "Configuración inicial — Factura Fácil" }],
+    meta: [{ title: "Configuración inicial — Factio" }],
   }),
   component: OnboardingPage,
 });
@@ -162,7 +162,7 @@ function OnboardingPage() {
         <header className="mb-8 text-[#C2E8FF]">
           <div className="flex items-center gap-2">
             <div className="grid size-9 place-items-center rounded-xl bg-[#C2E8FF] font-bold text-[#011025]">F</div>
-            <span className="font-semibold tracking-tight">Factura Fácil</span>
+            <span className="font-semibold tracking-tight">Factio</span>
           </div>
           <h1 className="mt-6 text-3xl font-bold tracking-tight text-white">
             Configura tu perfil fiscal
