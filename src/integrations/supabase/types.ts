@@ -429,6 +429,42 @@ export type Database = {
           },
         ]
       }
+      plans: {
+        Row: {
+          created_at: string
+          facturas_incluidas: number
+          features: Json
+          id: string
+          is_active: boolean
+          key: string
+          nombre: string
+          precio_mxn: number
+          stripe_price_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          facturas_incluidas: number
+          features?: Json
+          id?: string
+          is_active?: boolean
+          key: string
+          nombre: string
+          precio_mxn: number
+          stripe_price_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          facturas_incluidas?: number
+          features?: Json
+          id?: string
+          is_active?: boolean
+          key?: string
+          nombre?: string
+          precio_mxn?: number
+          stripe_price_id?: string | null
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           category: string | null
@@ -520,6 +556,134 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      stamp_transactions: {
+        Row: {
+          amount: number
+          company_id: string
+          created_at: string
+          id: string
+          reference_id: string | null
+          subscription_id: string | null
+          type: string
+        }
+        Insert: {
+          amount: number
+          company_id: string
+          created_at?: string
+          id?: string
+          reference_id?: string | null
+          subscription_id?: string | null
+          type: string
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          created_at?: string
+          id?: string
+          reference_id?: string | null
+          subscription_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stamp_transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stamp_transactions_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stamp_wallets: {
+        Row: {
+          balance: number
+          company_id: string
+          updated_at: string
+        }
+        Insert: {
+          balance?: number
+          company_id: string
+          updated_at?: string
+        }
+        Update: {
+          balance?: number
+          company_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stamp_wallets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean
+          company_id: string
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          plan_id: string
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean
+          company_id: string
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_id: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean
+          company_id?: string
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_id?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

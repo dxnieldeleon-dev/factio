@@ -88,7 +88,7 @@ function Dashboard() {
             {initials}
           </div>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Factura Fácil</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Factio</p>
             <h1 className="text-base font-semibold leading-tight">{data?.businessName ?? "..."}</h1>
           </div>
         </div>

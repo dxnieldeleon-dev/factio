@@ -311,7 +311,7 @@ function Profile() {
           </div>
           <div className="flex-1">
             <p className="font-semibold">Cerrar sesión</p>
-            <p className="text-xs text-muted-foreground">Salir de Factura Fácil</p>
+            <p className="text-xs text-muted-foreground">Salir de Factio</p>
           </div>
         </button>
       </section>
