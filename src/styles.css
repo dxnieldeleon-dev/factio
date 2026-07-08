@@ -76,9 +76,9 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0 0);
 
-  --primary: oklch(0.55 0.2 256);
+  --primary: oklch(0.281 0.100 259.3);        /* #052659 — color exacto del logo */
   --primary-foreground: oklch(0.99 0 0);
-  --primary-soft: oklch(0.96 0.025 256);
+  --primary-soft: oklch(0.911 0.051 234.7);   /* #C2E8FF — tono más claro de la marca */
 
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.18 0 0);
@@ -98,16 +98,16 @@
 
   --border: oklch(0 0 0 / 0.07);
   --input: oklch(0 0 0 / 0.1);
-  --ring: oklch(0.55 0.2 256 / 0.4);
+  --ring: oklch(0.281 0.100 259.3 / 0.4);
 
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.18 0 0);
-  --sidebar-primary: oklch(0.55 0.2 256);
+  --sidebar-primary: oklch(0.281 0.100 259.3);
   --sidebar-primary-foreground: oklch(0.99 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.18 0 0);
   --sidebar-border: oklch(0 0 0 / 0.07);
-  --sidebar-ring: oklch(0.55 0.2 256 / 0.4);
+  --sidebar-ring: oklch(0.281 0.100 259.3 / 0.4);
 }
 
 .dark {
