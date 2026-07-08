@@ -5,9 +5,12 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
- * Factura Fácil — "Ledger suave" design system
+ * Factio — "Ledger suave" design system
  * Inspired by Stripe, Linear, Apple, Mercado Pago.
  * Mobile-first. Calm, professional, fiscal-trust.
+ *
+ * Paleta Factio: #011025 (oscuro) · #052659 (primary) · #5482B4 (medio) ·
+ * #7EA0C5 (claro) · #C2E8FF (más claro)
  * ============================================================ */
 
 @theme inline {
