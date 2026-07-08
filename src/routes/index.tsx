@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Sparkles, ShieldCheck, Zap } from "lucide-react";
+import factioLogo from "@/assets/factio-logo.png.asset.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Factio — Facturación CFDI 4.0 en menos de 60 segundos" },
       { name: "description", content: "La forma más sencilla de emitir facturas electrónicas en México. Para freelancers, profesionistas y pequeñas empresas." },
-      { property: "og:title", content: "Factio — Facturación CFDI 4.0 en menos de 60 segundos" },
+      { property: "og:title", content: "Factio" },
       { property: "og:description", content: "La forma más sencilla de emitir facturas electrónicas en México. Para freelancers, profesionistas y pequeñas empresas." },
     ],
   }),
@@ -18,8 +19,8 @@ function Landing() {
     <div className="min-h-dvh bg-background text-foreground">
       <header className="mx-auto flex max-w-5xl items-center justify-between px-5 pt-8">
         <div className="flex items-center gap-2">
-          <div className="grid size-8 place-items-center rounded-xl bg-foreground text-background font-bold">F</div>
-          <span className="font-semibold tracking-tight">Factura Fácil</span>
+          <img src={factioLogo.url} alt="Factio" className="size-8 rounded-lg" />
+          <span className="font-semibold tracking-tight">Factio</span>
         </div>
         <Link
           to="/auth"
