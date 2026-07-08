@@ -119,9 +119,9 @@
   --popover: oklch(0.18 0.008 260);
   --popover-foreground: oklch(0.97 0 0);
 
-  --primary: oklch(0.7 0.18 256);
-  --primary-foreground: oklch(0.14 0.005 260);
-  --primary-soft: oklch(0.25 0.04 256);
+  --primary: oklch(0.694 0.066 250.9);            /* #7EA0C5 — tono claro de la marca */
+  --primary-foreground: oklch(0.173 0.050 253.5); /* #011025 — navy más oscuro */
+  --primary-soft: oklch(0.281 0.100 259.3 / 0.3); /* #052659 con transparencia */
 
   --secondary: oklch(0.22 0.008 260);
   --secondary-foreground: oklch(0.97 0 0);
@@ -141,16 +141,16 @@
 
   --border: oklch(1 0 0 / 0.08);
   --input: oklch(1 0 0 / 0.1);
-  --ring: oklch(0.7 0.18 256 / 0.5);
+  --ring: oklch(0.694 0.066 250.9 / 0.5);
 
   --sidebar: oklch(0.14 0.005 260);
   --sidebar-foreground: oklch(0.97 0 0);
-  --sidebar-primary: oklch(0.7 0.18 256);
-  --sidebar-primary-foreground: oklch(0.14 0.005 260);
+  --sidebar-primary: oklch(0.694 0.066 250.9);
+  --sidebar-primary-foreground: oklch(0.173 0.050 253.5);
   --sidebar-accent: oklch(0.22 0.008 260);
   --sidebar-accent-foreground: oklch(0.97 0 0);
   --sidebar-border: oklch(1 0 0 / 0.08);
-  --sidebar-ring: oklch(0.7 0.18 256 / 0.5);
+  --sidebar-ring: oklch(0.694 0.066 250.9 / 0.5);
 }
 
 @layer base {
