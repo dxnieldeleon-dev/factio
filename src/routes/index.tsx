@@ -67,7 +67,7 @@ function Landing() {
         <div className="mt-20 grid gap-4 sm:grid-cols-3">
           {[
             { icon: Zap, title: "Rápido de verdad", body: "Crea, timbra y envía una factura sin salir de tu celular." },
-            { icon: ShieldCheck, title: "Sin errores fiscales", body: "Validamos RFC, régimen y uso CFDI antes de timbrar." },
+            { icon: ShieldCheck, title: "Evita errores fiscales", body: "Validamos RFC, régimen y uso CFDI antes de timbrar." },
             { icon: Sparkles, title: "Diseñado para ti", body: "Interfaz sencilla, pensada para freelancers y pequeñas empresas." },
           ].map((f) => (
             <div key={f.title} className="rounded-3xl border border-border bg-surface p-6 shadow-soft">
