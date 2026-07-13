@@ -76,38 +76,57 @@ function SettingsPage() {
           icon={Fingerprint}
           title="Biometría"
           subtitle="Usar huella o Face ID al abrir"
-          checked={prefs?.biometrics_enabled ?? false}
-          onToggle={() => toggle("biometrics_enabled")}
+          checked={false}
+          disabled
+          comingSoon
         />
         <Row
           icon={KeyRound}
           title="PIN de seguridad"
           subtitle="Protege la app con un PIN de 4 dígitos"
-          checked={prefs?.pin_enabled ?? false}
-          onToggle={() => toggle("pin_enabled")}
+          checked={false}
+          disabled
+          comingSoon
         />
       </section>
     </div>
   );
 }
 
-function Row({ icon: Icon, title, subtitle, checked, onToggle }: { icon: typeof Bell; title: string; subtitle: string; checked: boolean; onToggle: () => void }) {
+function Row({
+  icon: Icon, title, subtitle, checked, onToggle, disabled, comingSoon,
+}: {
+  icon: typeof Bell; title: string; subtitle: string; checked: boolean;
+  onToggle?: () => void; disabled?: boolean; comingSoon?: boolean;
+}) {
   return (
     <button
       type="button"
-      onClick={onToggle}
-      className="flex w-full items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 text-left transition active:scale-[0.99]"
+      onClick={disabled ? undefined : onToggle}
+      disabled={disabled}
+      className={`flex w-full items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 text-left transition ${
+        disabled ? "opacity-60 cursor-not-allowed" : "active:scale-[0.99]"
+      }`}
     >
       <div className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary">
         <Icon className="size-4" />
       </div>
       <div className="flex-1">
-        <p className="font-semibold">{title}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-semibold">{title}</p>
+          {comingSoon && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+              Próximamente
+            </span>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground">{subtitle}</p>
       </div>
-      <span className={`relative inline-block h-6 w-10 rounded-full transition ${checked ? "bg-primary" : "bg-muted"}`}>
-        <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition ${checked ? "left-[18px]" : "left-0.5"}`} />
-      </span>
+      {!disabled && (
+        <span className={`relative inline-block h-6 w-10 rounded-full transition ${checked ? "bg-primary" : "bg-muted"}`}>
+          <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition ${checked ? "left-[18px]" : "left-0.5"}`} />
+        </span>
+      )}
     </button>
   );
 }
