@@ -1,13 +1,11 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { LogOut, Building2, Settings, Loader2, ShieldCheck, Eye, EyeOff, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { TAX_REGIMES } from "@/lib/sat-catalogs";
 import { validateRFC } from "@/lib/format";
-import { saveCsdPassword } from "@/lib/csd.functions";
 
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -28,7 +26,6 @@ function Profile() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["profile"], queryFn: loadProfile });
-  const saveCsdPasswordFn = useServerFn(saveCsdPassword);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<{
     legal_name: string; trade_name: string; rfc: string; tax_regime: string;
@@ -42,9 +39,15 @@ function Profile() {
   const [csdPassword, setCsdPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [savingCsd, setSavingCsd] = useState(false);
+  const [csdError, setCsdError] = useState<string | null>(null);
 
-  const hasCsdConfigured = !!(data?.company?.csd_cer_url && data?.company?.csd_key_url);
-  const canSaveCsd = !!cerFile || !!keyFile || csdPassword.length > 0;
+  const hasCsdConfigured = !!(
+    data?.company?.csd_cer_url &&
+    data?.company?.csd_key_url &&
+    data?.company?.csd_serial_number &&
+    data?.company?.csd_valid_to
+  );
+  const canSaveCsd = (!!cerFile || !!keyFile || !!data?.company?.csd_cer_url) && csdPassword.length > 0;
 
   async function onSaveCsd() {
     if (!data?.user) return;
@@ -53,35 +56,53 @@ function Profile() {
       return;
     }
     setSavingCsd(true);
+    setCsdError(null);
     try {
       const userId = data.user.id;
+      const companyId = data.company.id;
       const updates: { csd_cer_url?: string; csd_key_url?: string } = {};
+
       if (cerFile) {
-        const path = `${userId}/cert.cer`;
+        const path = `${userId}/${companyId}/cert.cer`;
         const { error } = await supabase.storage.from("csd-files").upload(path, cerFile, { upsert: true });
         if (error) throw error;
         updates.csd_cer_url = path;
       }
       if (keyFile) {
-        const path = `${userId}/private.key`;
+        const path = `${userId}/${companyId}/key.key`;
         const { error } = await supabase.storage.from("csd-files").upload(path, keyFile, { upsert: true });
         if (error) throw error;
         updates.csd_key_url = path;
       }
       if (Object.keys(updates).length > 0) {
-        const { error } = await supabase.from("companies").update(updates).eq("id", data.company.id);
+        const { error } = await supabase.from("companies").update(updates).eq("id", companyId);
         if (error) throw error;
       }
-      if (csdPassword.length > 0) {
-        await saveCsdPasswordFn({ data: { companyId: data.company.id, password: csdPassword } });
+
+      // La validación real (¿la contraseña abre el .key? ¿el .key corresponde
+      // al .cer?) ocurre en el servidor. La contraseña viaja solo en esta
+      // llamada y nunca se guarda en ningún lado.
+      const { data: result, error: fnError } = await supabase.functions.invoke("validar-csd", {
+        body: { company_id: companyId, password: csdPassword },
+      });
+
+      if (fnError) throw fnError;
+      if (!result?.success) {
+        setCsdError(result?.error ?? "No pudimos validar tu CSD.");
+        toast.error(result?.error ?? "No pudimos validar tu CSD.");
+        return;
       }
-      toast.success("CSD guardado correctamente");
+
+      toast.success("CSD validado y guardado correctamente");
       setCerFile(null);
       setKeyFile(null);
       setCsdPassword("");
       qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No pudimos guardar el CSD");
+      const message = err instanceof Error ? err.message : "No pudimos guardar el CSD";
+      setCsdError(message);
+      toast.error(message);
     } finally {
       setSavingCsd(false);
     }
@@ -279,9 +300,13 @@ function Profile() {
             </button>
           </div>
           <p className="mt-1.5 text-[11px] text-muted-foreground">
-            Esta es la contraseña que elegiste al generar tu CSD en el portal del SAT.
+            Esta es la contraseña que elegiste al generar tu CSD en el portal del SAT. Nunca se guarda: solo se usa para validar y se descarta de inmediato.
           </p>
         </Field>
+
+        {csdError && (
+          <p className="rounded-xl bg-destructive/10 px-3 py-2.5 text-[12px] text-destructive">{csdError}</p>
+        )}
 
         <button
           type="button"
