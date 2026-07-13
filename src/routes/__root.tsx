@@ -57,7 +57,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           >
             Reintentar
           </button>
-          <a
+          
             href="/"
             className="inline-flex items-center justify-center rounded-full border border-input bg-surface px-5 py-2.5 text-sm font-medium hover:bg-accent"
           >
@@ -116,3 +116,26 @@ function RootShell({ children }: { children: ReactNode }) {
         <Scripts />
       </body>
     </html>
+  );
+}
+
+function RootComponent() {
+  const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      router.invalidate();
+      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+    });
+    return () => { data.subscription.unsubscribe(); };
+  }, [queryClient, router]);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Outlet />
+      <Toaster position="top-center" richColors closeButton />
+    </QueryClientProvider>
+  );
+}
