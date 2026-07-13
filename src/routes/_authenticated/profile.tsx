@@ -1,8 +1,11 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { LogOut, Building2, Settings, Loader2, ShieldCheck, Eye, EyeOff, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
+import {
+  LogOut, Building2, Settings, Loader2, ShieldCheck, Eye, EyeOff, Upload,
+  CheckCircle2, AlertTriangle, CreditCard, Zap,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { TAX_REGIMES } from "@/lib/sat-catalogs";
 import { validateRFC } from "@/lib/format";
@@ -12,6 +15,14 @@ export const Route = createFileRoute("/_authenticated/profile")({
   component: Profile,
 });
 
+interface PlanRow {
+  id: string; key: string; nombre: string; precio_mxn: number;
+  facturas_incluidas: number; features: Record<string, boolean>;
+}
+interface SubscriptionRow {
+  id: string; plan_id: string; status: string; current_period_end: string | null;
+}
+
 async function loadProfile() {
   const { data: userData } = await supabase.auth.getUser();
   const { data: company } = await supabase
@@ -19,7 +30,24 @@ async function loadProfile() {
     .select("*")
     .eq("user_id", userData.user!.id)
     .maybeSingle();
-  return { user: userData.user, company };
+
+  const [plansRes, subRes, walletRes] = await Promise.all([
+    supabase.from("plans").select("id, key, nombre, precio_mxn, facturas_incluidas, features").eq("is_active", true).order("precio_mxn"),
+    company
+      ? supabase.from("subscriptions").select("id, plan_id, status, current_period_end").eq("company_id", company.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    company
+      ? supabase.from("stamp_wallets").select("balance").eq("company_id", company.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  return {
+    user: userData.user,
+    company,
+    plans: (plansRes.data as PlanRow[]) ?? [],
+    subscription: subRes.data as SubscriptionRow | null,
+    walletBalance: (walletRes.data as { balance?: number } | null)?.balance ?? null,
+  };
 }
 
 function Profile() {
@@ -41,6 +69,27 @@ function Profile() {
   const [savingCsd, setSavingCsd] = useState(false);
   const [csdError, setCsdError] = useState<string | null>(null);
 
+  const [showPlans, setShowPlans] = useState(false);
+  const [subscribingPlan, setSubscribingPlan] = useState<string | null>(null);
+
+  // Maneja el redirect de vuelta desde Stripe Checkout (?suscripcion=exito|cancelada)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const estado = params.get("suscripcion");
+    if (estado === "exito") {
+      toast.success("¡Suscripción activada! Puede tardar unos segundos en reflejarse.");
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    } else if (estado === "cancelada") {
+      toast.info("Pago cancelado. No se realizó ningún cargo.");
+    }
+    if (estado) {
+      params.delete("suscripcion");
+      const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+      window.history.replaceState({}, "", next);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const hasCsdConfigured = !!(
     data?.company?.csd_cer_url &&
     data?.company?.csd_key_url &&
@@ -48,6 +97,13 @@ function Profile() {
     data?.company?.csd_valid_to
   );
   const canSaveCsd = (!!cerFile || !!keyFile || !!data?.company?.csd_cer_url) && csdPassword.length > 0;
+
+  const activeSub = data?.subscription && (data.subscription.status === "active" || data.subscription.status === "trialing")
+    ? data.subscription
+    : null;
+  const activePlan = activeSub ? data?.plans.find((p) => p.id === activeSub.plan_id) ?? null : null;
+  const used = activePlan ? activePlan.facturas_incluidas - (data?.walletBalance ?? 0) : 0;
+  const usagePct = activePlan ? Math.min(100, Math.max(0, (used / activePlan.facturas_incluidas) * 100)) : 0;
 
   async function onSaveCsd() {
     if (!data?.user) return;
@@ -105,6 +161,25 @@ function Profile() {
       toast.error(message);
     } finally {
       setSavingCsd(false);
+    }
+  }
+
+  async function onSubscribe(planKey: string) {
+    setSubscribingPlan(planKey);
+    try {
+      const { data: result, error } = await supabase.functions.invoke("create-checkout-session", {
+        body: { plan_key: planKey },
+      });
+      if (error) throw error;
+      if (!result?.success || !result?.url) {
+        toast.error(result?.error ?? "No pudimos iniciar el pago.");
+        return;
+      }
+      window.location.href = result.url;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No pudimos iniciar el pago.");
+    } finally {
+      setSubscribingPlan(null);
     }
   }
 
@@ -321,6 +396,84 @@ function Profile() {
           <ShieldCheck className="size-3.5 mt-0.5 shrink-0" />
           Tus archivos CSD se almacenan cifrados y solo son accesibles por ti. Nunca se comparten con terceros.
         </p>
+      </section>
+
+      {/* -------- Suscripción -------- */}
+      <section className="mt-8 space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Suscripción</h2>
+
+        {activePlan && activeSub ? (
+          <div className="rounded-2xl border border-border bg-surface p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold">{activePlan.nombre}</p>
+                <p className="text-xs text-muted-foreground">${activePlan.precio_mxn} MXN/mes</p>
+              </div>
+              <CreditCard className="size-5 text-primary" />
+            </div>
+
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>Llevas {used} de {activePlan.facturas_incluidas} facturas este mes</span>
+                <span>{Math.round(usagePct)}%</span>
+              </div>
+              <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full ${usagePct >= 100 ? "bg-destructive" : "bg-primary"}`}
+                  style={{ width: `${usagePct}%` }}
+                />
+              </div>
+            </div>
+
+            {activeSub.current_period_end && (
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Se renueva el {new Date(activeSub.current_period_end).toLocaleDateString("es-MX", { day: "numeric", month: "long" })}
+              </p>
+            )}
+
+            {(data?.walletBalance ?? 0) <= 0 && (
+              <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-[11px] text-amber-800">
+                <Zap className="size-3.5 mt-0.5 shrink-0" />
+                Se te acabaron los timbres de este mes. Sube de plan para seguir facturando.
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowPlans((v) => !v)}
+              className="mt-3 w-full rounded-xl border border-border bg-background py-2.5 text-xs font-semibold text-foreground"
+            >
+              {showPlans ? "Ocultar planes" : "Ver otros planes"}
+            </button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Aún no tienes una suscripción activa. Elige un plan para poder timbrar tus facturas.
+          </p>
+        )}
+
+        {(!activePlan || showPlans) && (
+          <div className="space-y-2.5">
+            {(data?.plans ?? []).map((p) => (
+              <div key={p.id} className="rounded-2xl border border-border bg-surface p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold">{p.nombre}</p>
+                    <p className="text-xs text-muted-foreground">${p.precio_mxn} MXN/mes · Hasta {p.facturas_incluidas} facturas</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSubscribe(p.key)}
+                    disabled={subscribingPlan === p.key}
+                    className="rounded-full bg-foreground px-4 py-2 text-xs font-semibold text-background disabled:opacity-60"
+                  >
+                    {subscribingPlan === p.key ? <Loader2 className="size-3.5 animate-spin" /> : "Suscribirme"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="mt-8 space-y-2">
