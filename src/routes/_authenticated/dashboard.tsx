@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Bell, TrendingUp, Users as UsersIcon, FileText, LogOut, ChevronRight, ShieldAlert, X } from "lucide-react";
+import { Plus, Bell, TrendingUp, Users as UsersIcon, FileText, LogOut, ChevronRight, ShieldAlert, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 import { formatMXN, formatDateMX } from "@/lib/format";
@@ -25,6 +25,9 @@ interface DashboardData {
   }>;
   businessName: string;
   csdReady: boolean;
+  hasActiveSubscription: boolean;
+  stampBalance: number | null;
+  facturasIncluidas: number | null;
 }
 
 
@@ -37,17 +40,35 @@ async function loadDashboard(): Promise<DashboardData> {
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-  const [companyRes, todayRes, monthRes, clientsRes, recentRes] = await Promise.all([
-    supabase.from("companies").select("trade_name, legal_name, csd_cer_url, csd_key_url, csd_serial_number, csd_valid_to").eq("user_id", userId!).limit(1).maybeSingle(),
+  const companyRes = await supabase
+    .from("companies")
+    .select("id, trade_name, legal_name, csd_cer_url, csd_key_url, csd_serial_number, csd_valid_to")
+    .eq("user_id", userId!)
+    .limit(1)
+    .maybeSingle();
+
+  const companyId = companyRes.data?.id;
+
+  const [todayRes, monthRes, clientsRes, recentRes, walletRes, subRes] = await Promise.all([
     supabase.from("invoices").select("id", { count: "exact", head: true }).eq("status", "issued").gte("created_at", startOfDay),
     supabase.from("invoices").select("total").eq("status", "issued").gte("created_at", startOfMonth),
     supabase.from("clients").select("id", { count: "exact", head: true }),
     supabase.from("invoices").select("id, series, folio, total, status, created_at, client_snapshot").order("created_at", { ascending: false }).limit(5),
+    companyId
+      ? supabase.from("stamp_wallets").select("balance").eq("company_id", companyId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    companyId
+      ? supabase.from("subscriptions").select("status, plan:plans(facturas_incluidas)").eq("company_id", companyId).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   const monthTotal = (monthRes.data ?? []).reduce((a, r) => a + Number(r.total ?? 0), 0);
   const c = companyRes.data;
   const csdReady = !!(c?.csd_cer_url && c?.csd_key_url && c?.csd_serial_number && c?.csd_valid_to && new Date(c.csd_valid_to) > new Date());
+
+  const subStatus = (subRes.data as { status?: string } | null)?.status;
+  const hasActiveSubscription = subStatus === "active" || subStatus === "trialing";
+  const planData = (subRes.data as { plan?: { facturas_incluidas?: number } | null } | null)?.plan;
 
   return {
     todayCount: todayRes.count ?? 0,
@@ -56,6 +77,9 @@ async function loadDashboard(): Promise<DashboardData> {
     recent: (recentRes.data as DashboardData["recent"]) ?? [],
     businessName: c?.trade_name || c?.legal_name || email.split("@")[0] || "Mi negocio",
     csdReady,
+    hasActiveSubscription,
+    stampBalance: (walletRes.data as { balance?: number } | null)?.balance ?? null,
+    facturasIncluidas: planData?.facturas_incluidas ?? null,
   };
 
 }
@@ -71,6 +95,13 @@ function Dashboard() {
     setCsdDismissed(true);
     try { window.localStorage.setItem("ff.csdBannerDismissed", "1"); } catch {}
   }
+
+  // Sin suscripción activa: no hay timbres que gastar.
+  // Con suscripción activa pero saldo en 0 (o negativo): se acabó el cupo del mes.
+  const limitReached =
+    !!data &&
+    data.csdReady &&
+    (!data.hasActiveSubscription || (data.stampBalance !== null && data.stampBalance <= 0));
 
 
   async function onSignOut() {
@@ -138,7 +169,28 @@ function Dashboard() {
         </div>
       )}
 
-
+      {limitReached && (
+        <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-amber-900 shadow-soft animate-reveal">
+          <Zap className="mt-0.5 size-5 shrink-0" strokeWidth={1.8} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">
+              {data?.hasActiveSubscription ? "Llegaste a tu límite de facturas este mes" : "Necesitas una suscripción para timbrar"}
+            </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-amber-900/80">
+              {data?.hasActiveSubscription
+                ? "Sube de plan para seguir timbrando facturas este mes."
+                : "Elige un plan para empezar a timbrar tus facturas ante el SAT."}
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/perfil" })}
+              className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-900 px-3 py-1 text-[11px] font-semibold text-amber-50 transition hover:bg-amber-950"
+            >
+              {data?.hasActiveSubscription ? "Ver planes" : "Elegir un plan"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <section className="mt-6 grid grid-cols-2 gap-3 animate-reveal">
         <div className="col-span-2 rounded-3xl border border-border bg-surface p-5 shadow-soft">
@@ -166,14 +218,26 @@ function Dashboard() {
         </div>
       </section>
 
-      <Link
-        to="/invoices/new"
-        className="mt-6 flex w-full animate-reveal items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background shadow-lift transition active:scale-[0.98]"
-        style={{ animationDelay: "100ms" }}
-      >
-        <Plus className="size-5" strokeWidth={2.4} />
-        Nueva factura
-      </Link>
+      {limitReached ? (
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/perfil" })}
+          className="mt-6 flex w-full animate-reveal items-center justify-center gap-2 rounded-2xl bg-muted py-4 text-sm font-semibold text-muted-foreground shadow-soft transition active:scale-[0.98]"
+          style={{ animationDelay: "100ms" }}
+        >
+          <Plus className="size-5" strokeWidth={2.4} />
+          Nueva factura (sin timbres disponibles)
+        </button>
+      ) : (
+        <Link
+          to="/invoices/new"
+          className="mt-6 flex w-full animate-reveal items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background shadow-lift transition active:scale-[0.98]"
+          style={{ animationDelay: "100ms" }}
+        >
+          <Plus className="size-5" strokeWidth={2.4} />
+          Nueva factura
+        </Link>
+      )}
 
       <section className="mt-10 animate-reveal" style={{ animationDelay: "200ms" }}>
         <div className="mb-3 flex items-center justify-between">
@@ -208,12 +272,22 @@ function Dashboard() {
           <div className="rounded-3xl border border-dashed border-border bg-surface px-6 py-12 text-center">
             <p className="font-semibold">Aún no has emitido facturas</p>
             <p className="mt-1 text-sm text-muted-foreground">Crea tu primera factura en menos de 60 segundos.</p>
-            <Link
-              to="/invoices/new"
-              className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background"
-            >
-              Nueva factura <ChevronRight className="size-4" />
-            </Link>
+            {limitReached ? (
+              <button
+                type="button"
+                onClick={() => navigate({ to: "/perfil" })}
+                className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-muted px-4 py-2 text-sm font-semibold text-muted-foreground"
+              >
+                {data?.hasActiveSubscription ? "Ver planes" : "Elegir un plan"} <ChevronRight className="size-4" />
+              </button>
+            ) : (
+              <Link
+                to="/invoices/new"
+                className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background"
+              >
+                Nueva factura <ChevronRight className="size-4" />
+              </Link>
+            )}
           </div>
         )}
       </section>
