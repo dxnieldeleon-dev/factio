@@ -25,10 +25,14 @@ function json(body: unknown, status = 200) {
 }
 
 Deno.serve(async (req) => {
+  // Responder solicitudes CORS preflight.
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: cors });
+    return new Response(null, {
+      headers: cors,
+    });
   }
 
+  // Solo permitir POST.
   if (req.method !== "POST") {
     return json(
       {
@@ -39,7 +43,10 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Requiere un usuario autenticado en Supabase.
+  // ---------------------------------------------------------
+  // 1. Verificar autenticación de Supabase
+  // ---------------------------------------------------------
+
   const authHeader =
     req.headers.get("authorization") ??
     req.headers.get("Authorization");
@@ -69,7 +76,10 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Credenciales de Facturama.
+  // ---------------------------------------------------------
+  // 2. Obtener configuración de Facturama
+  // ---------------------------------------------------------
+
   const username = Deno.env.get("FACTURAMA_USERNAME");
   const password = Deno.env.get("FACTURAMA_PASSWORD");
   const environment =
@@ -87,7 +97,10 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Recibir el payload fiscal.
+  // ---------------------------------------------------------
+  // 3. Recibir payload del CFDI
+  // ---------------------------------------------------------
+
   let payload: Record<string, unknown>;
 
   try {
@@ -102,7 +115,10 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Validaciones mínimas para esta primera prueba.
+  // ---------------------------------------------------------
+  // 4. Validaciones mínimas
+  // ---------------------------------------------------------
+
   if (!payload.Issuer) {
     return json(
       {
@@ -140,14 +156,28 @@ Deno.serve(async (req) => {
     );
   }
 
+  // ---------------------------------------------------------
+  // 5. Seleccionar URL de Facturama
+  // ---------------------------------------------------------
+
   const baseUrl =
     environment === "production"
       ? "https://api.facturama.mx"
       : "https://apisandbox.facturama.mx";
 
+  // ---------------------------------------------------------
+  // 6. Crear Basic Authentication
+  // ---------------------------------------------------------
+
   const credentials = encodeBase64(
-    new TextEncoder().encode(`${username}:${password}`),
+    new TextEncoder().encode(
+      `${username}:${password}`,
+    ),
   );
+
+  // ---------------------------------------------------------
+  // 7. Enviar CFDI a Facturama
+  // ---------------------------------------------------------
 
   try {
     const response = await fetch(
@@ -163,20 +193,44 @@ Deno.serve(async (req) => {
       },
     );
 
+    // -------------------------------------------------------
+    // 8. Leer respuesta de Facturama
+    // -------------------------------------------------------
+    //
+    // Primero se lee como texto.
+    // Esto permite capturar errores aunque Facturama no
+    // responda con JSON válido.
+
+    const responseText = await response.text();
+
     let responseBody: unknown = null;
 
-    try {
-      responseBody = await response.json();
-    } catch {
-      responseBody = null;
+    if (responseText) {
+      try {
+        responseBody = JSON.parse(responseText);
+      } catch {
+        responseBody = responseText;
+      }
     }
 
+    // -------------------------------------------------------
+    // 9. Manejar error de Facturama
+    // -------------------------------------------------------
+
     if (!response.ok) {
-      console.error("Facturama CFDI error", {
-        status: response.status,
-        statusText: response.statusText,
-        environment,
-      });
+      // IMPORTANTE:
+      // No registrar credenciales, certificados,
+      // contraseñas ni el payload completo.
+
+      console.error(
+        "Facturama CFDI error:",
+        JSON.stringify({
+          status: response.status,
+          statusText: response.statusText,
+          environment,
+          response: responseBody,
+        }),
+      );
 
       return json(
         {
@@ -184,6 +238,8 @@ Deno.serve(async (req) => {
           stamped: false,
           environment,
           facturama_status: response.status,
+          facturama_status_text:
+            response.statusText,
           facturama_response: responseBody,
           reason:
             "Facturama rechazó la creación del CFDI.",
@@ -191,6 +247,10 @@ Deno.serve(async (req) => {
         400,
       );
     }
+
+    // -------------------------------------------------------
+    // 10. CFDI creado correctamente
+    // -------------------------------------------------------
 
     return json({
       ok: true,
@@ -201,6 +261,10 @@ Deno.serve(async (req) => {
       cfdi: responseBody,
     });
   } catch (error) {
+    // -------------------------------------------------------
+    // 11. Error de conexión
+    // -------------------------------------------------------
+
     console.error(
       "Facturama CFDI connection error:",
       error instanceof Error
