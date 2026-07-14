@@ -123,21 +123,30 @@ Deno.serve(async (req) => {
     }
 
     if (!response.ok) {
-      return json(
-        {
-          ok: false,
-          configured: true,
-          authenticated: response.status !== 401,
-          environment,
-          status: response.status,
-          reason:
-            response.status === 401
-              ? "Facturama rechazó las credenciales."
-              : "Facturama respondió con un error.",
-        },
-        response.status >= 500 ? 502 : 400,
-      );
-    }
+  console.error("Facturama API error", {
+    status: response.status,
+    statusText: response.statusText,
+    environment,
+    response: responseBody,
+  });
+
+  return json(
+    {
+      ok: false,
+      configured: true,
+      authenticated: response.status !== 401,
+      environment,
+      facturama_status: response.status,
+      facturama_status_text: response.statusText,
+      facturama_response: responseBody,
+      reason:
+        response.status === 401
+          ? "Facturama rechazó las credenciales."
+          : "Facturama respondió con un error.",
+    },
+    response.status >= 500 ? 502 : 400,
+  );
+}
 
     return json({
       ok: true,
