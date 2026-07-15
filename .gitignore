@@ -30,7 +30,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-# Environment variables and secrets
+# Environment variables
 .env
-.env.*
+.env.local
+.env.*.local
+
+# Keep example file
 !.env.example
