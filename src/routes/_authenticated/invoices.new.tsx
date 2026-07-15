@@ -2,7 +2,22 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Search, Plus, Trash2, Check, Loader2, FileCheck2, Download, Share2, Home, AlertCircle, Pencil, Save } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Search,
+  Plus,
+  Trash2,
+  Check,
+  Loader2,
+  FileCheck2,
+  Download,
+  Share2,
+  Home,
+  AlertCircle,
+  Pencil,
+  Save,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatMXN } from "@/lib/format";
 import {
@@ -25,23 +40,36 @@ import {
   type FieldErrors,
   type ReceiverProfile,
 } from "@/lib/fiscal";
-import { pac } from "@/lib/pac";
 
 export const Route = createFileRoute("/_authenticated/invoices/new")({
   component: NewInvoice,
 });
 
 interface ClientRow {
-  id: string; legal_name: string; rfc: string; tax_regime: string | null;
-  postal_code: string | null; cfdi_use: string | null; email: string | null;
+  id: string;
+  legal_name: string;
+  rfc: string;
+  tax_regime: string | null;
+  postal_code: string | null;
+  cfdi_use: string | null;
+  email: string | null;
 }
 interface ProductRow {
-  id: string; description: string; sat_key: string; sat_unit: string;
-  unit_price: number; iva_rate: number;
+  id: string;
+  description: string;
+  sat_key: string;
+  sat_unit: string;
+  unit_price: number;
+  iva_rate: number;
 }
 interface LineItem {
-  sat_key: string; sat_unit: string; description: string;
-  quantity: number; unit_price: number; discount: number; iva_rate: number;
+  sat_key: string;
+  sat_unit: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  discount: number;
+  iva_rate: number;
   product_id?: string;
 }
 
@@ -67,7 +95,13 @@ function NewInvoice() {
   const [exportCode, setExportCode] = useState("01");
 
   const [issuing, setIssuing] = useState(false);
-  const [result, setResult] = useState<{ id: string; series: string; folio: number; uuid: string; xmlUrl: string } | null>(null);
+  const [result, setResult] = useState<{
+    id: string;
+    series: string;
+    folio: number;
+    uuid: string;
+    xmlUrl: string;
+  } | null>(null);
 
   // Perfil emisor (para reglas de RFC genérico → CP del emisor)
   const { data: issuer } = useQuery({
@@ -75,14 +109,24 @@ function NewInvoice() {
     queryFn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return null;
-      const { data } = await supabase.from("companies").select("*").eq("user_id", u.user.id).maybeSingle();
+      const { data } = await supabase
+        .from("companies")
+        .select("*")
+        .eq("user_id", u.user.id)
+        .maybeSingle();
       return data;
     },
   });
 
   const totals = useMemo(() => {
-    const subtotal = items.reduce((a, i) => a + (i.quantity * i.unit_price - i.discount), 0);
-    const ivaTotal = items.reduce((a, i) => a + (i.quantity * i.unit_price - i.discount) * i.iva_rate, 0);
+    const subtotal = items.reduce(
+      (a, i) => a + (i.quantity * i.unit_price - i.discount),
+      0,
+    );
+    const ivaTotal = items.reduce(
+      (a, i) => a + (i.quantity * i.unit_price - i.discount) * i.iva_rate,
+      0,
+    );
     return { subtotal, ivaTotal, total: subtotal + ivaTotal };
   }, [items]);
 
@@ -108,9 +152,18 @@ function NewInvoice() {
 
   async function onIssue() {
     if (!client || !receiver) return;
-    if (items.length === 0) { toast.error("Agrega al menos un concepto"); return; }
-    if (hasErrors(receiverErrors)) { toast.error("Revisa los datos fiscales del receptor"); return; }
-    if (paymentError) { toast.error(paymentError); return; }
+    if (items.length === 0) {
+      toast.error("Agrega al menos un concepto");
+      return;
+    }
+    if (hasErrors(receiverErrors)) {
+      toast.error("Revisa los datos fiscales del receptor");
+      return;
+    }
+    if (paymentError) {
+      toast.error(paymentError);
+      return;
+    }
     if (currency !== "MXN" && (!exchangeRate || exchangeRate <= 0)) {
       toast.error("Captura el tipo de cambio para la moneda seleccionada");
       return;
@@ -118,15 +171,29 @@ function NewInvoice() {
 
     setIssuing(true);
     try {
-      const { data: u } = await supabase.auth.getUser();
-      const { data: company } = await supabase.from("companies").select("*").eq("user_id", u.user!.id).maybeSingle();
+      const { data: u, error: userError } = await supabase.auth.getUser();
+      if (userError || !u.user)
+        throw new Error("Tu sesión no es válida. Inicia sesión nuevamente.");
+
+      const { data: company, error: companyError } = await supabase
+        .from("companies")
+        .select("*")
+        .eq("user_id", u.user.id)
+        .maybeSingle();
+      if (companyError) throw companyError;
       if (!company) {
         toast.error("Configura tu perfil del negocio antes de facturar.");
         navigate({ to: "/profile" });
         return;
       }
-      if (!company.csd_cer_url || !company.csd_key_url || !company.csd_serial_number) {
-        toast.error("Configura tu Certificado de Sello Digital (CSD) antes de timbrar.");
+      if (
+        !company.csd_cer_url ||
+        !company.csd_key_url ||
+        !company.csd_serial_number
+      ) {
+        toast.error(
+          "Configura tu Certificado de Sello Digital (CSD) antes de timbrar.",
+        );
         return;
       }
       if (company.csd_valid_to && new Date(company.csd_valid_to) < new Date()) {
@@ -134,65 +201,52 @@ function NewInvoice() {
         return;
       }
 
-
-      // Folio siguiente
-      const { data: lastFolio } = await supabase
-        .from("invoices").select("folio").eq("user_id", u.user!.id).eq("series", "A")
-        .order("folio", { ascending: false }).limit(1).maybeSingle();
+      const { data: lastFolio, error: folioError } = await supabase
+        .from("invoices")
+        .select("folio")
+        .eq("user_id", u.user.id)
+        .eq("series", "A")
+        .order("folio", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (folioError) throw folioError;
       const folio = (lastFolio?.folio ?? 0) + 1;
 
-      const stamp = await pac.stamp({
-        series: "A",
-        folio,
-        issuerRfc: company.rfc,
-        receiverRfc: receiver.rfc,
-        receiverName: receiver.legal_name,
-        receiverTaxRegime: receiver.tax_regime ?? "",
-        receiverCfdiUse: receiver.cfdi_use ?? "",
-        receiverPostalCode: receiver.postal_code ?? "",
-        paymentForm,
-        paymentMethod,
-        currency,
-        items: items.map((i) => ({
-          satKey: i.sat_key, satUnit: i.sat_unit, description: i.description,
-          quantity: i.quantity, unitPrice: i.unit_price, discount: i.discount, ivaRate: i.iva_rate,
-        })),
-      });
-
-      if (!stamp.ok) { toast.error(`Error PAC: ${stamp.message}`); return; }
-
-      const { data: invoice, error } = await supabase.from("invoices").insert({
-        user_id: u.user!.id,
-        company_id: company.id,
-        client_id: client.id,
-        client_snapshot: {
-          legal_name: receiver.legal_name,
-          rfc: receiver.rfc,
+      // Primero se crea el borrador y sus conceptos. La Edge Function será la única
+      // responsable de timbrar, marcar como issued y consumir el timbre.
+      const { data: invoice, error: invoiceError } = await supabase
+        .from("invoices")
+        .insert({
+          user_id: u.user.id,
+          company_id: company.id,
+          client_id: client.id,
+          client_snapshot: {
+            legal_name: receiver.legal_name,
+            rfc: receiver.rfc,
+            cfdi_use: receiver.cfdi_use,
+            tax_regime: receiver.tax_regime,
+            postal_code: receiver.postal_code,
+          },
+          series: "A",
+          folio,
+          status: "draft",
+          payment_method: paymentMethod,
+          payment_form: paymentForm,
           cfdi_use: receiver.cfdi_use,
-          tax_regime: receiver.tax_regime,
-          postal_code: receiver.postal_code,
-        },
-        series: "A",
-        folio,
-        uuid_fiscal: stamp.uuid,
-        status: "issued",
-        payment_method: paymentMethod,
-        payment_form: paymentForm,
-        cfdi_use: receiver.cfdi_use,
-        currency,
-        exchange_rate: currency === "MXN" ? 1 : exchangeRate,
-        subtotal: totals.subtotal,
-        iva_total: totals.ivaTotal,
-        total: totals.total,
-        xml_url: stamp.xmlUrl,
-        issued_at: stamp.stampedAt,
-        notes: `cfdi_type=${cfdiType};export=${exportCode}`,
-      }).select("id").single();
-      if (error) throw error;
+          currency,
+          exchange_rate: currency === "MXN" ? 1 : exchangeRate,
+          subtotal: totals.subtotal,
+          iva_total: totals.ivaTotal,
+          total: totals.total,
+          notes: `cfdi_type=${cfdiType};export=${exportCode}`,
+        })
+        .select("id")
+        .single();
+      if (invoiceError) throw invoiceError;
 
       const itemRows = items.map((i, idx) => ({
         invoice_id: invoice.id,
-        user_id: u.user!.id,
+        user_id: u.user.id,
         product_id: i.product_id ?? null,
         sat_key: i.sat_key,
         sat_unit: i.sat_unit,
@@ -205,26 +259,95 @@ function NewInvoice() {
         amount: i.quantity * i.unit_price - i.discount,
         position: idx,
       }));
-      await supabase.from("invoice_items").insert(itemRows);
 
-      // Guardar cambios en el perfil del cliente si el usuario lo pidió
-      if (saveReceiverEdits) {
-        await supabase.from("clients").update({
-          legal_name: receiver.legal_name,
-          tax_regime: receiver.tax_regime,
-          postal_code: receiver.postal_code,
-          cfdi_use: receiver.cfdi_use,
-        }).eq("id", client.id);
-        qc.invalidateQueries({ queryKey: ["clients"] });
+      const { error: itemsError } = await supabase
+        .from("invoice_items")
+        .insert(itemRows);
+      if (itemsError) {
+        await supabase
+          .from("invoices")
+          .delete()
+          .eq("id", invoice.id)
+          .eq("status", "draft");
+        throw itemsError;
       }
 
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["invoices", "history"] });
+      if (saveReceiverEdits) {
+        const { error: clientUpdateError } = await supabase
+          .from("clients")
+          .update({
+            legal_name: receiver.legal_name,
+            tax_regime: receiver.tax_regime,
+            postal_code: receiver.postal_code,
+            cfdi_use: receiver.cfdi_use,
+          })
+          .eq("id", client.id);
+        if (clientUpdateError)
+          console.error("No se pudo actualizar el cliente:", clientUpdateError);
+      }
 
-      setResult({ id: invoice.id, series: "A", folio, uuid: stamp.uuid, xmlUrl: stamp.xmlUrl });
+      const { data: stampResult, error: stampFunctionError } =
+        await supabase.functions.invoke("facturama-create-cfdi", {
+          body: { invoice_id: invoice.id },
+        });
+
+      if (stampFunctionError) {
+        console.error(
+          "Error invoking facturama-create-cfdi:",
+          stampFunctionError,
+        );
+        throw new Error(
+          "No fue posible comunicarse con el servicio de facturación.",
+        );
+      }
+
+      if (!stampResult?.stamped) {
+        console.error("CFDI stamping failed:", stampResult);
+        toast.error(
+          stampResult?.reason ?? "No fue posible timbrar la factura.",
+        );
+        return;
+      }
+
+      if (stampResult.stamp_consumed === false) {
+        console.error(
+          "CFDI stamped but stamp consumption failed:",
+          stampResult,
+        );
+        toast.warning(
+          "La factura fue timbrada correctamente, pero el saldo está pendiente de actualización.",
+        );
+      } else {
+        toast.success("Factura timbrada correctamente");
+      }
+
+      const { data: issuedInvoice, error: issuedInvoiceError } = await supabase
+        .from("invoices")
+        .select("id, series, folio, uuid_fiscal, xml_url")
+        .eq("id", invoice.id)
+        .single();
+      if (issuedInvoiceError) throw issuedInvoiceError;
+
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["dashboard"] }),
+        qc.invalidateQueries({ queryKey: ["profile"] }),
+        qc.invalidateQueries({ queryKey: ["invoices", "history"] }),
+        qc.invalidateQueries({ queryKey: ["clients"] }),
+      ]);
+
+      setResult({
+        id: issuedInvoice.id,
+        series: issuedInvoice.series,
+        folio: issuedInvoice.folio,
+        uuid: issuedInvoice.uuid_fiscal ?? "",
+        xmlUrl: issuedInvoice.xml_url ?? "",
+      });
       setStep(4);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No pudimos emitir la factura");
+      console.error("Invoice issue error:", err);
+      toast.error(
+        err instanceof Error ? err.message : "No pudimos emitir la factura",
+      );
     } finally {
       setIssuing(false);
     }
@@ -234,22 +357,37 @@ function NewInvoice() {
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
       <header className="flex items-center gap-3">
         <button
-          onClick={() => (step > 1 && step < 4 ? setStep((step - 1) as Step) : navigate({ to: "/dashboard" }))}
+          onClick={() =>
+            step > 1 && step < 4
+              ? setStep((step - 1) as Step)
+              : navigate({ to: "/dashboard" })
+          }
           className="grid size-10 place-items-center rounded-full border border-border bg-surface"
         >
           <ArrowLeft className="size-4" />
         </button>
         <div className="flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Paso {Math.min(step, 3)} de 3</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Paso {Math.min(step, 3)} de 3
+          </p>
           <h1 className="text-lg font-bold tracking-tight">
-            {step === 1 ? "Selecciona cliente" : step === 2 ? "Agrega conceptos" : step === 3 ? "Revisa y emite" : "Factura emitida"}
+            {step === 1
+              ? "Selecciona cliente"
+              : step === 2
+                ? "Agrega conceptos"
+                : step === 3
+                  ? "Revisa y emite"
+                  : "Factura emitida"}
           </h1>
         </div>
       </header>
 
       <div className="mt-4 flex gap-1.5">
         {[1, 2, 3].map((n) => (
-          <div key={n} className={`h-1 flex-1 rounded-full ${n <= Math.min(step, 3) ? "bg-foreground" : "bg-muted"}`} />
+          <div
+            key={n}
+            className={`h-1 flex-1 rounded-full ${n <= Math.min(step, 3) ? "bg-foreground" : "bg-muted"}`}
+          />
         ))}
       </div>
 
@@ -259,7 +397,11 @@ function NewInvoice() {
           <StepItems
             items={items}
             setItems={setItems}
-            onNext={() => items.length > 0 ? setStep(3) : toast.error("Agrega al menos un concepto")}
+            onNext={() =>
+              items.length > 0
+                ? setStep(3)
+                : toast.error("Agrega al menos un concepto")
+            }
           />
         )}
         {step === 3 && client && receiver && (
@@ -302,12 +444,21 @@ function StepClient({ onPick }: { onPick: (c: ClientRow) => void }) {
   const { data, isLoading } = useQuery({
     queryKey: ["clients", "picker"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email").order("is_favorite", { ascending: false }).order("legal_name");
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email")
+        .order("is_favorite", { ascending: false })
+        .order("legal_name");
       if (error) throw error;
       return (data ?? []) as ClientRow[];
     },
   });
-  const filtered = (data ?? []).filter((c) => !q || c.legal_name.toLowerCase().includes(q.toLowerCase()) || c.rfc.toLowerCase().includes(q.toLowerCase()));
+  const filtered = (data ?? []).filter(
+    (c) =>
+      !q ||
+      c.legal_name.toLowerCase().includes(q.toLowerCase()) ||
+      c.rfc.toLowerCase().includes(q.toLowerCase()),
+  );
 
   return (
     <div>
@@ -321,14 +472,26 @@ function StepClient({ onPick }: { onPick: (c: ClientRow) => void }) {
           className="w-full rounded-2xl border border-input bg-surface py-3 pl-11 pr-4 text-sm focus:border-primary focus:outline-none focus:ring-4 focus:ring-ring"
         />
       </div>
-      <Link to="/clients/new" className="mt-3 flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border bg-surface py-3 text-sm font-semibold text-primary">
+      <Link
+        to="/clients/new"
+        className="mt-3 flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border bg-surface py-3 text-sm font-semibold text-primary"
+      >
         <Plus className="size-4" /> Crear nuevo cliente
       </Link>
       <div className="mt-4">
         {isLoading ? (
-          <div className="space-y-3">{[0, 1, 2].map((i) => <div key={i} className="h-16 animate-pulse rounded-2xl border border-border bg-surface" />)}</div>
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-16 animate-pulse rounded-2xl border border-border bg-surface"
+              />
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">Sin clientes que coincidan.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Sin clientes que coincidan.
+          </p>
         ) : (
           <ul className="space-y-2">
             {filtered.map((c) => (
@@ -342,7 +505,9 @@ function StepClient({ onPick }: { onPick: (c: ClientRow) => void }) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold">{c.legal_name}</p>
-                    <p className="font-mono text-[10px] uppercase text-muted-foreground">{c.rfc}</p>
+                    <p className="font-mono text-[10px] uppercase text-muted-foreground">
+                      {c.rfc}
+                    </p>
                   </div>
                   <ArrowRight className="size-4 text-muted-foreground" />
                 </button>
@@ -356,32 +521,64 @@ function StepClient({ onPick }: { onPick: (c: ClientRow) => void }) {
 }
 
 /* -------- Step 2: Items -------- */
-function StepItems({ items, setItems, onNext }: { items: LineItem[]; setItems: (i: LineItem[]) => void; onNext: () => void }) {
+function StepItems({
+  items,
+  setItems,
+  onNext,
+}: {
+  items: LineItem[];
+  setItems: (i: LineItem[]) => void;
+  onNext: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const { data: products } = useQuery({
     queryKey: ["products", "picker"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("products").select("id, description, sat_key, sat_unit, unit_price, iva_rate").eq("is_active", true).order("description");
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, description, sat_key, sat_unit, unit_price, iva_rate")
+        .eq("is_active", true)
+        .order("description");
       if (error) throw error;
       return (data ?? []) as ProductRow[];
     },
   });
 
   function addProduct(p: ProductRow) {
-    setItems([...items, {
-      product_id: p.id, sat_key: p.sat_key, sat_unit: p.sat_unit, description: p.description,
-      quantity: 1, unit_price: Number(p.unit_price), discount: 0, iva_rate: Number(p.iva_rate),
-    }]);
+    setItems([
+      ...items,
+      {
+        product_id: p.id,
+        sat_key: p.sat_key,
+        sat_unit: p.sat_unit,
+        description: p.description,
+        quantity: 1,
+        unit_price: Number(p.unit_price),
+        discount: 0,
+        iva_rate: Number(p.iva_rate),
+      },
+    ]);
     setOpen(false);
   }
 
   function addManual() {
-    setItems([...items, { sat_key: "01010101", sat_unit: "E48", description: "", quantity: 1, unit_price: 0, discount: 0, iva_rate: 0.16 }]);
+    setItems([
+      ...items,
+      {
+        sat_key: "01010101",
+        sat_unit: "E48",
+        description: "",
+        quantity: 1,
+        unit_price: 0,
+        discount: 0,
+        iva_rate: 0.16,
+      },
+    ]);
     setOpen(false);
   }
 
   function update(idx: number, patch: Partial<LineItem>) {
-    setItems(items.map((it, i) => i === idx ? { ...it, ...patch } : it));
+    setItems(items.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
 
   function remove(idx: number) {
@@ -391,7 +588,10 @@ function StepItems({ items, setItems, onNext }: { items: LineItem[]; setItems: (
   return (
     <div className="space-y-3">
       {items.map((it, idx) => (
-        <div key={idx} className="rounded-2xl border border-border bg-surface p-4">
+        <div
+          key={idx}
+          className="rounded-2xl border border-border bg-surface p-4"
+        >
           <div className="flex items-start justify-between gap-2">
             <input
               value={it.description}
@@ -399,34 +599,86 @@ function StepItems({ items, setItems, onNext }: { items: LineItem[]; setItems: (
               placeholder="Descripción"
               className="flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground"
             />
-            <button onClick={() => remove(idx)} className="text-muted-foreground hover:text-destructive">
+            <button
+              onClick={() => remove(idx)}
+              className="text-muted-foreground hover:text-destructive"
+            >
               <Trash2 className="size-4" />
             </button>
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2">
             <Mini label="Cant.">
-              <input type="number" step="0.01" min="0" value={it.quantity} onChange={(e) => update(idx, { quantity: Number(e.target.value) })} className="ff-mini" />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={it.quantity}
+                onChange={(e) =>
+                  update(idx, { quantity: Number(e.target.value) })
+                }
+                className="ff-mini"
+              />
             </Mini>
             <Mini label="Precio">
-              <input type="number" step="0.01" min="0" value={it.unit_price} onChange={(e) => update(idx, { unit_price: Number(e.target.value) })} className="ff-mini" />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={it.unit_price}
+                onChange={(e) =>
+                  update(idx, { unit_price: Number(e.target.value) })
+                }
+                className="ff-mini"
+              />
             </Mini>
             <Mini label="Desc.">
-              <input type="number" step="0.01" min="0" value={it.discount} onChange={(e) => update(idx, { discount: Number(e.target.value) })} className="ff-mini" />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={it.discount}
+                onChange={(e) =>
+                  update(idx, { discount: Number(e.target.value) })
+                }
+                className="ff-mini"
+              />
             </Mini>
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2">
             <Mini label="Clave SAT">
-              <select value={it.sat_key} onChange={(e) => update(idx, { sat_key: e.target.value })} className="ff-mini">
-                {COMMON_SAT_KEYS.map((k) => <option key={k.code} value={k.code}>{k.code}</option>)}
+              <select
+                value={it.sat_key}
+                onChange={(e) => update(idx, { sat_key: e.target.value })}
+                className="ff-mini"
+              >
+                {COMMON_SAT_KEYS.map((k) => (
+                  <option key={k.code} value={k.code}>
+                    {k.code}
+                  </option>
+                ))}
               </select>
             </Mini>
             <Mini label="Unidad">
-              <select value={it.sat_unit} onChange={(e) => update(idx, { sat_unit: e.target.value })} className="ff-mini">
-                {COMMON_SAT_UNITS.map((u) => <option key={u.code} value={u.code}>{u.code}</option>)}
+              <select
+                value={it.sat_unit}
+                onChange={(e) => update(idx, { sat_unit: e.target.value })}
+                className="ff-mini"
+              >
+                {COMMON_SAT_UNITS.map((u) => (
+                  <option key={u.code} value={u.code}>
+                    {u.code}
+                  </option>
+                ))}
               </select>
             </Mini>
             <Mini label="IVA">
-              <select value={it.iva_rate} onChange={(e) => update(idx, { iva_rate: Number(e.target.value) })} className="ff-mini">
+              <select
+                value={it.iva_rate}
+                onChange={(e) =>
+                  update(idx, { iva_rate: Number(e.target.value) })
+                }
+                className="ff-mini"
+              >
                 <option value={0.16}>16%</option>
                 <option value={0.08}>8%</option>
                 <option value={0}>0%</option>
@@ -435,35 +687,64 @@ function StepItems({ items, setItems, onNext }: { items: LineItem[]; setItems: (
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
             <span className="text-xs text-muted-foreground">Importe</span>
-            <span className="font-bold">{formatMXN(it.quantity * it.unit_price - it.discount)}</span>
+            <span className="font-bold">
+              {formatMXN(it.quantity * it.unit_price - it.discount)}
+            </span>
           </div>
         </div>
       ))}
 
       {open ? (
         <div className="rounded-2xl border border-border bg-surface p-3">
-          <p className="mb-2 px-1 text-xs font-semibold uppercase text-muted-foreground">Elige del catálogo</p>
+          <p className="mb-2 px-1 text-xs font-semibold uppercase text-muted-foreground">
+            Elige del catálogo
+          </p>
           <div className="max-h-72 space-y-1.5 overflow-y-auto">
             {(products ?? []).map((p) => (
-              <button key={p.id} onClick={() => addProduct(p)} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left hover:bg-accent">
+              <button
+                key={p.id}
+                onClick={() => addProduct(p)}
+                className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left hover:bg-accent"
+              >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{p.description}</p>
-                  <p className="font-mono text-[10px] text-muted-foreground">SAT {p.sat_key}</p>
+                  <p className="truncate text-sm font-medium">
+                    {p.description}
+                  </p>
+                  <p className="font-mono text-[10px] text-muted-foreground">
+                    SAT {p.sat_key}
+                  </p>
                 </div>
-                <span className="shrink-0 text-sm font-bold">{formatMXN(p.unit_price)}</span>
+                <span className="shrink-0 text-sm font-bold">
+                  {formatMXN(p.unit_price)}
+                </span>
               </button>
             ))}
             {(products ?? []).length === 0 && (
-              <p className="px-3 py-4 text-center text-xs text-muted-foreground">Tu catálogo está vacío.</p>
+              <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                Tu catálogo está vacío.
+              </p>
             )}
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <button onClick={addManual} className="rounded-xl border border-border bg-background py-2 text-xs font-semibold">Agregar manual</button>
-            <button onClick={() => setOpen(false)} className="rounded-xl bg-muted py-2 text-xs font-semibold text-muted-foreground">Cancelar</button>
+            <button
+              onClick={addManual}
+              className="rounded-xl border border-border bg-background py-2 text-xs font-semibold"
+            >
+              Agregar manual
+            </button>
+            <button
+              onClick={() => setOpen(false)}
+              className="rounded-xl bg-muted py-2 text-xs font-semibold text-muted-foreground"
+            >
+              Cancelar
+            </button>
           </div>
         </div>
       ) : (
-        <button onClick={() => setOpen(true)} className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border bg-surface py-3 text-sm font-semibold text-primary">
+        <button
+          onClick={() => setOpen(true)}
+          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border bg-surface py-3 text-sm font-semibold text-primary"
+        >
           <Plus className="size-4" /> Agregar concepto
         </button>
       )}
@@ -480,19 +761,41 @@ function StepItems({ items, setItems, onNext }: { items: LineItem[]; setItems: (
   );
 }
 
-function Mini({ label, children, error }: { label: string; children: React.ReactNode; error?: string }) {
+function Mini({
+  label,
+  children,
+  error,
+}: {
+  label: string;
+  children: React.ReactNode;
+  error?: string;
+}) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
       {children}
-      {error && <span className="mt-1 block text-[10px] font-medium text-destructive">{error}</span>}
+      {error && (
+        <span className="mt-1 block text-[10px] font-medium text-destructive">
+          {error}
+        </span>
+      )}
     </label>
   );
 }
 
 /* -------- Step 3: Review -------- */
 type StepReviewProps = {
-  issuer: { rfc?: string; legal_name?: string; postal_code?: string | null; tax_regime?: string | null } | null | undefined;
+  issuer:
+    | {
+        rfc?: string;
+        legal_name?: string;
+        postal_code?: string | null;
+        tax_regime?: string | null;
+      }
+    | null
+    | undefined;
   client: ClientRow;
   receiver: ReceiverProfile;
   setReceiver: (r: ReceiverProfile) => void;
@@ -501,31 +804,57 @@ type StepReviewProps = {
   setSaveReceiverEdits: (v: boolean) => void;
   items: LineItem[];
   totals: { subtotal: number; ivaTotal: number; total: number };
-  cfdiType: string; setCfdiType: (v: string) => void;
-  paymentMethod: string; paymentForm: string;
-  setPaymentMethod: (v: string) => void; setPaymentForm: (v: string) => void;
+  cfdiType: string;
+  setCfdiType: (v: string) => void;
+  paymentMethod: string;
+  paymentForm: string;
+  setPaymentMethod: (v: string) => void;
+  setPaymentForm: (v: string) => void;
   paymentError: string | null;
-  currency: string; setCurrency: (v: string) => void;
-  exchangeRate: number; setExchangeRate: (v: number) => void;
-  exportCode: string; setExportCode: (v: string) => void;
-  onIssue: () => void; issuing: boolean;
+  currency: string;
+  setCurrency: (v: string) => void;
+  exchangeRate: number;
+  setExchangeRate: (v: number) => void;
+  exportCode: string;
+  setExportCode: (v: string) => void;
+  onIssue: () => void;
+  issuing: boolean;
 };
 
 function StepReview(props: StepReviewProps) {
   const {
-    issuer, client, receiver, setReceiver, receiverErrors,
-    saveReceiverEdits, setSaveReceiverEdits,
-    items, totals,
-    cfdiType, setCfdiType,
-    paymentMethod, paymentForm, setPaymentMethod, setPaymentForm, paymentError,
-    currency, setCurrency, exchangeRate, setExchangeRate,
-    exportCode, setExportCode,
-    onIssue, issuing,
+    issuer,
+    client,
+    receiver,
+    setReceiver,
+    receiverErrors,
+    saveReceiverEdits,
+    setSaveReceiverEdits,
+    items,
+    totals,
+    cfdiType,
+    setCfdiType,
+    paymentMethod,
+    paymentForm,
+    setPaymentMethod,
+    setPaymentForm,
+    paymentError,
+    currency,
+    setCurrency,
+    exchangeRate,
+    setExchangeRate,
+    exportCode,
+    setExportCode,
+    onIssue,
+    issuing,
   } = props;
 
   const [editReceiver, setEditReceiver] = useState(false);
   const receiverBlocking = hasErrors(receiverErrors);
-  const allowedUses = useMemo(() => cfdiUsesForRegime(receiver.tax_regime), [receiver.tax_regime]);
+  const allowedUses = useMemo(
+    () => cfdiUsesForRegime(receiver.tax_regime),
+    [receiver.tax_regime],
+  );
   const isEditedFromClient =
     receiver.legal_name !== normalizeFiscalName(client.legal_name) ||
     receiver.tax_regime !== client.tax_regime ||
@@ -542,7 +871,8 @@ function StepReview(props: StepReviewProps) {
     // Si cambia el régimen y el uso ya no aplica, resetea el uso.
     if (k === "tax_regime") {
       const allowed = cfdiUsesForRegime(v as string).map((x) => x.code);
-      if (next.cfdi_use && !allowed.includes(next.cfdi_use)) next.cfdi_use = null;
+      if (next.cfdi_use && !allowed.includes(next.cfdi_use))
+        next.cfdi_use = null;
     }
     setReceiver(next);
   }
@@ -551,10 +881,15 @@ function StepReview(props: StepReviewProps) {
     <div className="space-y-4">
       {/* Emisor */}
       <div className="rounded-2xl border border-border bg-surface p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Emisor</p>
-        <p className="mt-1 truncate font-semibold">{issuer?.legal_name ?? "Configura tu perfil"}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Emisor
+        </p>
+        <p className="mt-1 truncate font-semibold">
+          {issuer?.legal_name ?? "Configura tu perfil"}
+        </p>
         <p className="font-mono text-xs text-muted-foreground">
-          {issuer?.rfc ?? "—"} · CP {issuer?.postal_code ?? "—"} · Régimen {issuer?.tax_regime ?? "—"}
+          {issuer?.rfc ?? "—"} · CP {issuer?.postal_code ?? "—"} · Régimen{" "}
+          {issuer?.tax_regime ?? "—"}
         </p>
       </div>
 
@@ -562,9 +897,15 @@ function StepReview(props: StepReviewProps) {
       <div className="rounded-2xl border border-border bg-surface p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Receptor</p>
-            <p className="mt-1 truncate font-semibold">{receiver.legal_name || "—"}</p>
-            <p className="font-mono text-xs text-muted-foreground">{receiver.rfc}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Receptor
+            </p>
+            <p className="mt-1 truncate font-semibold">
+              {receiver.legal_name || "—"}
+            </p>
+            <p className="font-mono text-xs text-muted-foreground">
+              {receiver.rfc}
+            </p>
           </div>
           <button
             type="button"
@@ -585,26 +926,44 @@ function StepReview(props: StepReviewProps) {
 
         {editReceiver && (
           <div className="mt-3 space-y-2.5">
-            <Mini label="Nombre / razón social (como en la constancia)" error={receiverErrors.legal_name}>
+            <Mini
+              label="Nombre / razón social (como en la constancia)"
+              error={receiverErrors.legal_name}
+            >
               <input
                 value={receiver.legal_name}
                 onChange={(e) => upd("legal_name", e.target.value)}
-                onBlur={(e) => upd("legal_name", normalizeFiscalName(e.target.value))}
+                onBlur={(e) =>
+                  upd("legal_name", normalizeFiscalName(e.target.value))
+                }
                 className="ff-mini"
                 placeholder="MI EMPRESA EJEMPLO"
               />
             </Mini>
             <div className="grid grid-cols-2 gap-2">
               <Mini label="Régimen fiscal" error={receiverErrors.tax_regime}>
-                <select value={receiver.tax_regime ?? ""} onChange={(e) => upd("tax_regime", e.target.value || null)} className="ff-mini">
+                <select
+                  value={receiver.tax_regime ?? ""}
+                  onChange={(e) => upd("tax_regime", e.target.value || null)}
+                  className="ff-mini"
+                >
                   <option value="">Selecciona…</option>
-                  {TAX_REGIMES.map((r) => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+                  {TAX_REGIMES.map((r) => (
+                    <option key={r.code} value={r.code}>
+                      {r.code} — {r.name}
+                    </option>
+                  ))}
                 </select>
               </Mini>
               <Mini label="Código postal" error={receiverErrors.postal_code}>
                 <input
                   value={receiver.postal_code ?? ""}
-                  onChange={(e) => upd("postal_code", e.target.value.replace(/\D/g, "").slice(0, 5))}
+                  onChange={(e) =>
+                    upd(
+                      "postal_code",
+                      e.target.value.replace(/\D/g, "").slice(0, 5),
+                    )
+                  }
                   inputMode="numeric"
                   maxLength={5}
                   className="ff-mini font-mono"
@@ -612,11 +971,20 @@ function StepReview(props: StepReviewProps) {
                 />
               </Mini>
             </div>
-            <Mini label="Uso CFDI (filtrado por régimen)" error={receiverErrors.cfdi_use}>
-              <select value={receiver.cfdi_use ?? ""} onChange={(e) => upd("cfdi_use", e.target.value || null)} className="ff-mini">
+            <Mini
+              label="Uso CFDI (filtrado por régimen)"
+              error={receiverErrors.cfdi_use}
+            >
+              <select
+                value={receiver.cfdi_use ?? ""}
+                onChange={(e) => upd("cfdi_use", e.target.value || null)}
+                className="ff-mini"
+              >
                 <option value="">Selecciona…</option>
                 {(allowedUses.length ? allowedUses : CFDI_USES).map((u) => (
-                  <option key={u.code} value={u.code}>{u.code} — {u.name}</option>
+                  <option key={u.code} value={u.code}>
+                    {u.code} — {u.name}
+                  </option>
                 ))}
               </select>
             </Mini>
@@ -641,41 +1009,107 @@ function StepReview(props: StepReviewProps) {
 
       {/* Datos del comprobante */}
       <div className="rounded-2xl border border-border bg-surface p-4">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Datos del comprobante</p>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Datos del comprobante
+        </p>
         <div className="space-y-2.5">
           <div className="grid grid-cols-2 gap-2">
             <Mini label="Tipo de comprobante">
-              <select value={cfdiType} onChange={(e) => setCfdiType(e.target.value)} className="ff-mini">
-                {CFDI_TYPES.map((t) => <option key={t.code} value={t.code}>{t.code} — {t.name}</option>)}
+              <select
+                value={cfdiType}
+                onChange={(e) => setCfdiType(e.target.value)}
+                className="ff-mini"
+              >
+                {CFDI_TYPES.map((t) => (
+                  <option key={t.code} value={t.code}>
+                    {t.code} — {t.name}
+                  </option>
+                ))}
               </select>
             </Mini>
             <Mini label="Exportación">
-              <select value={exportCode} onChange={(e) => setExportCode(e.target.value)} className="ff-mini">
-                {EXPORT_CODES.map((e2) => <option key={e2.code} value={e2.code}>{e2.code} — {e2.name}</option>)}
+              <select
+                value={exportCode}
+                onChange={(e) => setExportCode(e.target.value)}
+                className="ff-mini"
+              >
+                {EXPORT_CODES.map((e2) => (
+                  <option key={e2.code} value={e2.code}>
+                    {e2.code} — {e2.name}
+                  </option>
+                ))}
               </select>
             </Mini>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Mini label="Moneda">
-              <select value={currency} onChange={(e) => { setCurrency(e.target.value); if (e.target.value === "MXN") setExchangeRate(1); }} className="ff-mini">
-                {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}
+              <select
+                value={currency}
+                onChange={(e) => {
+                  setCurrency(e.target.value);
+                  if (e.target.value === "MXN") setExchangeRate(1);
+                }}
+                className="ff-mini"
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code}
+                  </option>
+                ))}
               </select>
             </Mini>
             {currency !== "MXN" && (
               <Mini label={`T. cambio ${currency}→MXN`}>
-                <input type="number" min="0" step="0.0001" value={exchangeRate} onChange={(e) => setExchangeRate(Number(e.target.value))} className="ff-mini font-mono" />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  value={exchangeRate}
+                  onChange={(e) => setExchangeRate(Number(e.target.value))}
+                  className="ff-mini font-mono"
+                />
               </Mini>
             )}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Mini label="Método" error={paymentError && paymentMethod === "PPD" ? paymentError : undefined}>
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="ff-mini">
-                {PAYMENT_METHODS.map((m) => <option key={m.code} value={m.code}>{m.code} — {m.name}</option>)}
+            <Mini
+              label="Método"
+              error={
+                paymentError && paymentMethod === "PPD"
+                  ? paymentError
+                  : undefined
+              }
+            >
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="ff-mini"
+              >
+                {PAYMENT_METHODS.map((m) => (
+                  <option key={m.code} value={m.code}>
+                    {m.code} — {m.name}
+                  </option>
+                ))}
               </select>
             </Mini>
-            <Mini label="Forma de pago" error={paymentError && paymentMethod !== "PPD" ? paymentError : undefined}>
-              <select value={paymentForm} onChange={(e) => setPaymentForm(e.target.value)} className="ff-mini">
-                {PAYMENT_FORMS.map((f) => <option key={f.code} value={f.code}>{f.code} — {f.name}</option>)}
+            <Mini
+              label="Forma de pago"
+              error={
+                paymentError && paymentMethod !== "PPD"
+                  ? paymentError
+                  : undefined
+              }
+            >
+              <select
+                value={paymentForm}
+                onChange={(e) => setPaymentForm(e.target.value)}
+                className="ff-mini"
+              >
+                {PAYMENT_FORMS.map((f) => (
+                  <option key={f.code} value={f.code}>
+                    {f.code} — {f.name}
+                  </option>
+                ))}
               </select>
             </Mini>
           </div>
@@ -684,12 +1118,24 @@ function StepReview(props: StepReviewProps) {
 
       {/* Conceptos + totales */}
       <div className="rounded-2xl border border-border bg-surface p-4">
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Conceptos ({items.length})</p>
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Conceptos ({items.length})
+        </p>
         <ul className="divide-y divide-border">
           {items.map((it, i) => (
-            <li key={i} className="flex items-center justify-between gap-2 py-2 text-sm">
-              <span className="min-w-0 truncate"><span className="font-mono text-[10px] text-muted-foreground">x{it.quantity}</span> {it.description || "—"}</span>
-              <span className="font-bold">{formatMXN(it.quantity * it.unit_price - it.discount)}</span>
+            <li
+              key={i}
+              className="flex items-center justify-between gap-2 py-2 text-sm"
+            >
+              <span className="min-w-0 truncate">
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  x{it.quantity}
+                </span>{" "}
+                {it.description || "—"}
+              </span>
+              <span className="font-bold">
+                {formatMXN(it.quantity * it.unit_price - it.discount)}
+              </span>
             </li>
           ))}
         </ul>
@@ -712,7 +1158,13 @@ function StepReview(props: StepReviewProps) {
         disabled={issuing || receiverBlocking || !!paymentError}
         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-50"
       >
-        {issuing ? <Loader2 className="size-4 animate-spin" /> : <>Emitir factura <Check className="size-4" /></>}
+        {issuing ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <>
+            Emitir factura <Check className="size-4" />
+          </>
+        )}
       </button>
       <p className="text-center text-[10px] text-muted-foreground">
         Conexión con PAC en modo demo · Configura tu PAC en producción.
@@ -726,15 +1178,27 @@ function StepReview(props: StepReviewProps) {
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-border bg-background px-2.5 py-1.5">
-      <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
       <p className="font-mono text-xs font-semibold">{value}</p>
     </div>
   );
 }
 
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+function Row({
+  label,
+  value,
+  bold,
+}: {
+  label: string;
+  value: string;
+  bold?: boolean;
+}) {
   return (
-    <div className={`flex items-center justify-between ${bold ? "text-base font-bold" : "text-muted-foreground"}`}>
+    <div
+      className={`flex items-center justify-between ${bold ? "text-base font-bold" : "text-muted-foreground"}`}
+    >
       <span>{label}</span>
       <span className={bold ? "text-foreground" : ""}>{value}</span>
     </div>
@@ -742,20 +1206,41 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
 }
 
 /* -------- Step 4: Success -------- */
-function StepSuccess({ result }: { result: { id: string; series: string; folio: number; uuid: string; xmlUrl: string } }) {
+function StepSuccess({
+  result,
+}: {
+  result: {
+    id: string;
+    series: string;
+    folio: number;
+    uuid: string;
+    xmlUrl: string;
+  };
+}) {
   return (
     <div className="py-6 text-center">
       <div className="mx-auto grid size-16 place-items-center rounded-full bg-success/10 text-success">
         <FileCheck2 className="size-7" />
       </div>
-      <h2 className="mt-5 text-2xl font-bold tracking-tight">¡Factura emitida!</h2>
+      <h2 className="mt-5 text-2xl font-bold tracking-tight">
+        ¡Factura emitida!
+      </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Folio <span className="font-mono font-semibold text-foreground">{result.series}-{String(result.folio).padStart(6, "0")}</span>
+        Folio{" "}
+        <span className="font-mono font-semibold text-foreground">
+          {result.series}-{String(result.folio).padStart(6, "0")}
+        </span>
       </p>
-      <p className="mt-2 break-all font-mono text-[10px] text-muted-foreground">UUID: {result.uuid}</p>
+      <p className="mt-2 break-all font-mono text-[10px] text-muted-foreground">
+        UUID: {result.uuid}
+      </p>
 
       <div className="mt-8 grid grid-cols-3 gap-2">
-        <a href={result.xmlUrl} download={`${result.series}-${result.folio}.xml`} className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface p-4 text-xs font-semibold">
+        <a
+          href={result.xmlUrl}
+          download={`${result.series}-${result.folio}.xml`}
+          className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface p-4 text-xs font-semibold"
+        >
           <Download className="size-5 text-primary" /> XML
         </a>
         <button className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface p-4 text-xs font-semibold">
@@ -766,7 +1251,10 @@ function StepSuccess({ result }: { result: { id: string; series: string; folio: 
         </button>
       </div>
 
-      <Link to="/dashboard" className="mt-8 inline-flex items-center gap-1.5 rounded-full bg-foreground px-5 py-2.5 text-sm font-semibold text-background">
+      <Link
+        to="/dashboard"
+        className="mt-8 inline-flex items-center gap-1.5 rounded-full bg-foreground px-5 py-2.5 text-sm font-semibold text-background"
+      >
         <Home className="size-4" /> Volver al inicio
       </Link>
     </div>
