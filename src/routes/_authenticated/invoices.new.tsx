@@ -1162,7 +1162,7 @@ function StepReview(props: StepReviewProps) {
           <Loader2 className="size-4 animate-spin" />
         ) : (
           <>
-            Emitir factura <Check className="size-4" />
+            Emitir factura V2 <Check className="size-4" />
           </>
         )}
       </button>
