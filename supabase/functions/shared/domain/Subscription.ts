@@ -22,7 +22,7 @@ export class Subscription {
 
     private readonly plan: string,
 
-    private readonly status: string,
+    private readonly status: SubscriptionStatus,
 
     private readonly startedAt: Date,
 
