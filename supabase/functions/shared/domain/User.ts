@@ -12,8 +12,8 @@ export class User {
     private readonly email: string,
     private readonly fullName: string,
 
-    private readonly role: string,
-    private readonly status: string,
+    private readonly role: UserRole,
+    private readonly status: UserStatus,
 
     private readonly lastLoginAt: Date | null,
 
