@@ -24,7 +24,7 @@ export class Invoice {
 
     private readonly total: number,
 
-    private readonly status: string,
+    private readonly status: InvoiceStatus,
 
     private readonly uuid: string | null,
 
