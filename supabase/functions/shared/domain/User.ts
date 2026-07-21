@@ -6,10 +6,10 @@
 
 export class User {
   constructor(
-    private readonly id: string,
-    private readonly companyId: string,
+    private readonly id: UUID,
+    private readonly companyId: UUID,
 
-    private readonly email: string,
+    private readonly email: Email,
     private readonly fullName: string,
 
     private readonly role: UserRole,
@@ -19,5 +19,10 @@ export class User {
 
     private readonly createdAt: Date,
     private readonly updatedAt: Date
+    ts
+import {
+  UUID,
+  Email,
+} from "../value-objects";
   ) {}
 }
