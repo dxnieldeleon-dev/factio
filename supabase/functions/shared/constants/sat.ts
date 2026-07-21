@@ -1,0 +1,12 @@
+export const SAT = {
+  RFC_PUBLICO_GENERAL: "XAXX010101000",
+  RFC_EXTRANJERO: "XEXX010101000",
+
+  DEFAULT_CURRENCY: "MXN",
+
+  DECIMALS: 2,
+
+  COUNTRY: "MEX",
+
+  TIMEZONE: "America/Mexico_City",
+} as const;
