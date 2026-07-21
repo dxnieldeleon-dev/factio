@@ -23,7 +23,7 @@ export class Company {
     private readonly phone: string,
 
     private readonly isActive: boolean,
-    private readonly csdStatus: string,
+    private readonly csdStatus: CompanyCsdStatus
 
     private readonly createdAt: Date,
     private readonly updatedAt: Date
