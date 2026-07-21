@@ -19,7 +19,7 @@ export class Company {
     private readonly taxRegime: string,
     private readonly postalCode: string,
 
-    private readonly email: string,
+    private readonly email: Email,
     private readonly phone: string,
 
     private readonly isActive: boolean,
@@ -31,6 +31,7 @@ export class Company {
 import {
   UUID,
   RFC,
+  Email,
 } from "../value-objects";
   ) {}
 }
