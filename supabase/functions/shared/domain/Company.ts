@@ -10,10 +10,10 @@
 
 export class Company {
   constructor(
-    private readonly id: string,
-    private readonly ownerId: string,
+    private readonly id: UUID,
+    private readonly ownerId: UUID,
 
-    private readonly rfc: string,
+    private readonly rfc: RFC,
     private readonly legalName: string,
     private readonly tradeName: string,
     private readonly taxRegime: string,
