@@ -27,5 +27,10 @@ export class Company {
 
     private readonly createdAt: Date,
     private readonly updatedAt: Date
+  ts
+import {
+  UUID,
+  RFC,
+} from "../value-objects";
   ) {}
 }
