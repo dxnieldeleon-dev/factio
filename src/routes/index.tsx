@@ -5,9 +5,9 @@ import factioLogo from "@/assets/factio-logo.png.asset.json";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Factio — Facturación CFDI 4.0 en menos de 60 segundos" },
+      { title: "Factio — Factura en menos de 60 segundos" },
       { name: "description", content: "La forma más sencilla de emitir facturas electrónicas en México. Para freelancers, profesionistas y pequeñas empresas." },
-      { property: "og:title", content: "Factio" },
+      { property: "og:title", content: "Factio — Factura en menos de 60 segundos" },
       { property: "og:description", content: "La forma más sencilla de emitir facturas electrónicas en México. Para freelancers, profesionistas y pequeñas empresas." },
     ],
   }),
