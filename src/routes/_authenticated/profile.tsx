@@ -15,6 +15,23 @@ export const Route = createFileRoute("/_authenticated/profile")({
   component: Profile,
 });
 
+// supabase.functions.invoke() lanza un mensaje genérico
+// ("Edge Function returned a non-2xx status code") cuando la función
+// responde con un status distinto de 2xx. El mensaje real que sí
+// devolvimos en el cuerpo JSON hay que leerlo desde error.context.
+async function getFunctionErrorMessage(error: unknown, fallback: string): Promise<string> {
+  const ctx = (error as { context?: Response })?.context;
+  if (ctx && typeof ctx.json === "function") {
+    try {
+      const body = await ctx.json();
+      if (body?.error) return body.error as string;
+    } catch {
+      // el cuerpo no era JSON o ya se consumió; usamos el fallback
+    }
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
 interface PlanRow {
   id: string; key: string; nombre: string; precio_mxn: number;
   facturas_incluidas: number; features: Record<string, boolean>;
@@ -142,7 +159,12 @@ function Profile() {
         body: { company_id: companyId, password: csdPassword },
       });
 
-      if (fnError) throw fnError;
+      if (fnError) {
+        const message = await getFunctionErrorMessage(fnError, "No pudimos validar tu CSD.");
+        setCsdError(message);
+        toast.error(message);
+        return;
+      }
       if (!result?.success) {
         setCsdError(result?.error ?? "No pudimos validar tu CSD.");
         toast.error(result?.error ?? "No pudimos validar tu CSD.");
@@ -170,7 +192,10 @@ function Profile() {
       const { data: result, error } = await supabase.functions.invoke("create-checkout-session", {
         body: { plan_key: planKey },
       });
-      if (error) throw error;
+      if (error) {
+        toast.error(await getFunctionErrorMessage(error, "No pudimos iniciar el pago."));
+        return;
+      }
       if (!result?.success || !result?.url) {
         toast.error(result?.error ?? "No pudimos iniciar el pago.");
         return;
