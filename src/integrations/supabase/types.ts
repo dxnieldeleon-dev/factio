@@ -1,850 +1,899 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
+    PostgrestVersion: "14.5";
+  };
   public: {
     Tables: {
       activity_logs: {
         Row: {
-          action: string
-          created_at: string
-          entity: string
-          entity_id: string | null
-          id: string
-          metadata: Json | null
-          user_id: string
-        }
+          action: string;
+          created_at: string;
+          entity: string;
+          entity_id: string | null;
+          id: string;
+          metadata: Json | null;
+          user_id: string;
+        };
         Insert: {
-          action: string
-          created_at?: string
-          entity: string
-          entity_id?: string | null
-          id?: string
-          metadata?: Json | null
-          user_id: string
-        }
+          action: string;
+          created_at?: string;
+          entity: string;
+          entity_id?: string | null;
+          id?: string;
+          metadata?: Json | null;
+          user_id: string;
+        };
         Update: {
-          action?: string
-          created_at?: string
-          entity?: string
-          entity_id?: string | null
-          id?: string
-          metadata?: Json | null
-          user_id?: string
-        }
-        Relationships: []
-      }
+          action?: string;
+          created_at?: string;
+          entity?: string;
+          entity_id?: string | null;
+          id?: string;
+          metadata?: Json | null;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       clients: {
         Row: {
-          cfdi_use: string | null
-          company_id: string | null
-          created_at: string
-          email: string | null
-          id: string
-          is_favorite: boolean
-          legal_name: string
-          notes: string | null
-          phone: string | null
-          postal_code: string | null
-          rfc: string
-          tax_regime: string | null
-          updated_at: string
-          user_id: string
-        }
+          cfdi_use: string | null;
+          company_id: string | null;
+          created_at: string;
+          email: string | null;
+          id: string;
+          is_favorite: boolean;
+          legal_name: string;
+          notes: string | null;
+          phone: string | null;
+          postal_code: string | null;
+          rfc: string;
+          tax_regime: string | null;
+          updated_at: string;
+          user_id: string;
+        };
         Insert: {
-          cfdi_use?: string | null
-          company_id?: string | null
-          created_at?: string
-          email?: string | null
-          id?: string
-          is_favorite?: boolean
-          legal_name: string
-          notes?: string | null
-          phone?: string | null
-          postal_code?: string | null
-          rfc: string
-          tax_regime?: string | null
-          updated_at?: string
-          user_id: string
-        }
+          cfdi_use?: string | null;
+          company_id?: string | null;
+          created_at?: string;
+          email?: string | null;
+          id?: string;
+          is_favorite?: boolean;
+          legal_name: string;
+          notes?: string | null;
+          phone?: string | null;
+          postal_code?: string | null;
+          rfc: string;
+          tax_regime?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
         Update: {
-          cfdi_use?: string | null
-          company_id?: string | null
-          created_at?: string
-          email?: string | null
-          id?: string
-          is_favorite?: boolean
-          legal_name?: string
-          notes?: string | null
-          phone?: string | null
-          postal_code?: string | null
-          rfc?: string
-          tax_regime?: string | null
-          updated_at?: string
-          user_id?: string
-        }
+          cfdi_use?: string | null;
+          company_id?: string | null;
+          created_at?: string;
+          email?: string | null;
+          id?: string;
+          is_favorite?: boolean;
+          legal_name?: string;
+          notes?: string | null;
+          phone?: string | null;
+          postal_code?: string | null;
+          rfc?: string;
+          tax_regime?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "clients_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
+            foreignKeyName: "clients_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       companies: {
         Row: {
-          address: string | null
-          branch: string | null
-          city: string | null
-          created_at: string
-          csd_cer_url: string | null
-          csd_key_url: string | null
-          csd_password_encrypted: string | null
-          csd_serial_number: string | null
-          csd_valid_from: string | null
-          csd_valid_to: string | null
-          email: string | null
-          id: string
-          is_default: boolean
-          legal_name: string
-          logo_url: string | null
-          onboarding_completed: boolean
-          phone: string | null
-          postal_code: string | null
-          rfc: string
-          state: string | null
-          tax_regime: string | null
-          trade_name: string | null
-          updated_at: string
-          user_id: string
-        }
+          address: string | null;
+          branch: string | null;
+          city: string | null;
+          created_at: string;
+          csd_cer_url: string | null;
+          csd_key_url: string | null;
+          csd_password_encrypted: string | null;
+          csd_serial_number: string | null;
+          csd_status: string;
+          csd_uploaded_at: string | null;
+          csd_valid_from: string | null;
+          csd_valid_to: string | null;
+          csd_last_error: string | null;
+          email: string | null;
+          id: string;
+          is_default: boolean;
+          legal_name: string;
+          logo_url: string | null;
+          onboarding_completed: boolean;
+          phone: string | null;
+          postal_code: string | null;
+          rfc: string;
+          state: string | null;
+          tax_regime: string | null;
+          trade_name: string | null;
+          updated_at: string;
+          user_id: string;
+        };
         Insert: {
-          address?: string | null
-          branch?: string | null
-          city?: string | null
-          created_at?: string
-          csd_cer_url?: string | null
-          csd_key_url?: string | null
-          csd_password_encrypted?: string | null
-          csd_serial_number?: string | null
-          csd_valid_from?: string | null
-          csd_valid_to?: string | null
-          email?: string | null
-          id?: string
-          is_default?: boolean
-          legal_name: string
-          logo_url?: string | null
-          onboarding_completed?: boolean
-          phone?: string | null
-          postal_code?: string | null
-          rfc: string
-          state?: string | null
-          tax_regime?: string | null
-          trade_name?: string | null
-          updated_at?: string
-          user_id: string
-        }
+          address?: string | null;
+          branch?: string | null;
+          city?: string | null;
+          created_at?: string;
+          csd_cer_url?: string | null;
+          csd_key_url?: string | null;
+          csd_password_encrypted?: string | null;
+          csd_serial_number?: string | null;
+          csd_status?: string;
+          csd_uploaded_at?: string | null;
+          csd_valid_from?: string | null;
+          csd_valid_to?: string | null;
+          csd_last_error?: string | null;
+          email?: string | null;
+          id?: string;
+          is_default?: boolean;
+          legal_name: string;
+          logo_url?: string | null;
+          onboarding_completed?: boolean;
+          phone?: string | null;
+          postal_code?: string | null;
+          rfc: string;
+          state?: string | null;
+          tax_regime?: string | null;
+          trade_name?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
         Update: {
-          address?: string | null
-          branch?: string | null
-          city?: string | null
-          created_at?: string
-          csd_cer_url?: string | null
-          csd_key_url?: string | null
-          csd_password_encrypted?: string | null
-          csd_serial_number?: string | null
-          csd_valid_from?: string | null
-          csd_valid_to?: string | null
-          email?: string | null
-          id?: string
-          is_default?: boolean
-          legal_name?: string
-          logo_url?: string | null
-          onboarding_completed?: boolean
-          phone?: string | null
-          postal_code?: string | null
-          rfc?: string
-          state?: string | null
-          tax_regime?: string | null
-          trade_name?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
+          address?: string | null;
+          branch?: string | null;
+          city?: string | null;
+          created_at?: string;
+          csd_cer_url?: string | null;
+          csd_key_url?: string | null;
+          csd_password_encrypted?: string | null;
+          csd_serial_number?: string | null;
+          csd_status?: string;
+          csd_uploaded_at?: string | null;
+          csd_valid_from?: string | null;
+          csd_valid_to?: string | null;
+          csd_last_error?: string | null;
+          email?: string | null;
+          id?: string;
+          is_default?: boolean;
+          legal_name?: string;
+          logo_url?: string | null;
+          onboarding_completed?: boolean;
+          phone?: string | null;
+          postal_code?: string | null;
+          rfc?: string;
+          state?: string | null;
+          tax_regime?: string | null;
+          trade_name?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       invoice_items: {
         Row: {
-          amount: number
-          created_at: string
-          description: string
-          discount: number
-          id: string
-          invoice_id: string
-          iva_amount: number
-          iva_rate: number
-          position: number
-          product_id: string | null
-          quantity: number
-          sat_key: string
-          sat_unit: string
-          unit_price: number
-          user_id: string
-        }
+          amount: number;
+          created_at: string;
+          description: string;
+          discount: number;
+          id: string;
+          invoice_id: string;
+          iva_amount: number;
+          iva_rate: number;
+          position: number;
+          product_id: string | null;
+          quantity: number;
+          sat_key: string;
+          sat_unit: string;
+          unit_price: number;
+          user_id: string;
+        };
         Insert: {
-          amount?: number
-          created_at?: string
-          description: string
-          discount?: number
-          id?: string
-          invoice_id: string
-          iva_amount?: number
-          iva_rate?: number
-          position?: number
-          product_id?: string | null
-          quantity?: number
-          sat_key: string
-          sat_unit: string
-          unit_price?: number
-          user_id: string
-        }
+          amount?: number;
+          created_at?: string;
+          description: string;
+          discount?: number;
+          id?: string;
+          invoice_id: string;
+          iva_amount?: number;
+          iva_rate?: number;
+          position?: number;
+          product_id?: string | null;
+          quantity?: number;
+          sat_key: string;
+          sat_unit: string;
+          unit_price?: number;
+          user_id: string;
+        };
         Update: {
-          amount?: number
-          created_at?: string
-          description?: string
-          discount?: number
-          id?: string
-          invoice_id?: string
-          iva_amount?: number
-          iva_rate?: number
-          position?: number
-          product_id?: string | null
-          quantity?: number
-          sat_key?: string
-          sat_unit?: string
-          unit_price?: number
-          user_id?: string
-        }
+          amount?: number;
+          created_at?: string;
+          description?: string;
+          discount?: number;
+          id?: string;
+          invoice_id?: string;
+          iva_amount?: number;
+          iva_rate?: number;
+          position?: number;
+          product_id?: string | null;
+          quantity?: number;
+          sat_key?: string;
+          sat_unit?: string;
+          unit_price?: number;
+          user_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "invoice_items_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
+            foreignKeyName: "invoice_items_invoice_id_fkey";
+            columns: ["invoice_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "invoice_items_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
+            foreignKeyName: "invoice_items_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       invoices: {
         Row: {
-          cancellation_reason: string | null
-          cancelled_at: string | null
-          cfdi_use: string | null
-          client_id: string | null
-          client_snapshot: Json | null
-          company_id: string | null
-          created_at: string
-          currency: string
-          discount: number
-          exchange_rate: number
-          folio: number
-          id: string
-          issued_at: string | null
-          iva_total: number
-          notes: string | null
-          payment_form: string | null
-          payment_method: string | null
-          pdf_url: string | null
-          retentions_total: number
-          series: string
-          status: Database["public"]["Enums"]["invoice_status"]
-          subtotal: number
-          total: number
-          updated_at: string
-          user_id: string
-          uuid_fiscal: string | null
-          xml_url: string | null
-        }
+          cancellation_pac_response: Json | null;
+          cancellation_reason: string | null;
+          cancellation_replacement_uuid: string | null;
+          cancellation_requested_at: string | null;
+          cancellation_status: string | null;
+          cancelled_at: string | null;
+          cfdi_use: string | null;
+          client_id: string | null;
+          client_snapshot: Json | null;
+          company_id: string | null;
+          created_at: string;
+          currency: string;
+          discount: number;
+          exchange_rate: number;
+          folio: number;
+          id: string;
+          issued_at: string | null;
+          iva_total: number;
+          notes: string | null;
+          payment_form: string | null;
+          payment_method: string | null;
+          pdf_url: string | null;
+          retentions_total: number;
+          series: string;
+          stamping_error: string | null;
+          stamping_started_at: string | null;
+          stamping_status: string;
+          status: Database["public"]["Enums"]["invoice_status"];
+          subtotal: number;
+          total: number;
+          updated_at: string;
+          user_id: string;
+          uuid_fiscal: string | null;
+          xml_url: string | null;
+        };
         Insert: {
-          cancellation_reason?: string | null
-          cancelled_at?: string | null
-          cfdi_use?: string | null
-          client_id?: string | null
-          client_snapshot?: Json | null
-          company_id?: string | null
-          created_at?: string
-          currency?: string
-          discount?: number
-          exchange_rate?: number
-          folio: number
-          id?: string
-          issued_at?: string | null
-          iva_total?: number
-          notes?: string | null
-          payment_form?: string | null
-          payment_method?: string | null
-          pdf_url?: string | null
-          retentions_total?: number
-          series?: string
-          status?: Database["public"]["Enums"]["invoice_status"]
-          subtotal?: number
-          total?: number
-          updated_at?: string
-          user_id: string
-          uuid_fiscal?: string | null
-          xml_url?: string | null
-        }
+          cancellation_pac_response?: Json | null;
+          cancellation_reason?: string | null;
+          cancellation_replacement_uuid?: string | null;
+          cancellation_requested_at?: string | null;
+          cancellation_status?: string | null;
+          cancelled_at?: string | null;
+          cfdi_use?: string | null;
+          client_id?: string | null;
+          client_snapshot?: Json | null;
+          company_id?: string | null;
+          created_at?: string;
+          currency?: string;
+          discount?: number;
+          exchange_rate?: number;
+          folio: number;
+          id?: string;
+          issued_at?: string | null;
+          iva_total?: number;
+          notes?: string | null;
+          payment_form?: string | null;
+          payment_method?: string | null;
+          pdf_url?: string | null;
+          retentions_total?: number;
+          series?: string;
+          stamping_error?: string | null;
+          stamping_started_at?: string | null;
+          stamping_status?: string;
+          status?: Database["public"]["Enums"]["invoice_status"];
+          subtotal?: number;
+          total?: number;
+          updated_at?: string;
+          user_id: string;
+          uuid_fiscal?: string | null;
+          xml_url?: string | null;
+        };
         Update: {
-          cancellation_reason?: string | null
-          cancelled_at?: string | null
-          cfdi_use?: string | null
-          client_id?: string | null
-          client_snapshot?: Json | null
-          company_id?: string | null
-          created_at?: string
-          currency?: string
-          discount?: number
-          exchange_rate?: number
-          folio?: number
-          id?: string
-          issued_at?: string | null
-          iva_total?: number
-          notes?: string | null
-          payment_form?: string | null
-          payment_method?: string | null
-          pdf_url?: string | null
-          retentions_total?: number
-          series?: string
-          status?: Database["public"]["Enums"]["invoice_status"]
-          subtotal?: number
-          total?: number
-          updated_at?: string
-          user_id?: string
-          uuid_fiscal?: string | null
-          xml_url?: string | null
-        }
+          cancellation_pac_response?: Json | null;
+          cancellation_reason?: string | null;
+          cancellation_replacement_uuid?: string | null;
+          cancellation_requested_at?: string | null;
+          cancellation_status?: string | null;
+          cancelled_at?: string | null;
+          cfdi_use?: string | null;
+          client_id?: string | null;
+          client_snapshot?: Json | null;
+          company_id?: string | null;
+          created_at?: string;
+          currency?: string;
+          discount?: number;
+          exchange_rate?: number;
+          folio?: number;
+          id?: string;
+          issued_at?: string | null;
+          iva_total?: number;
+          notes?: string | null;
+          payment_form?: string | null;
+          payment_method?: string | null;
+          pdf_url?: string | null;
+          retentions_total?: number;
+          series?: string;
+          stamping_error?: string | null;
+          stamping_started_at?: string | null;
+          stamping_status?: string;
+          status?: Database["public"]["Enums"]["invoice_status"];
+          subtotal?: number;
+          total?: number;
+          updated_at?: string;
+          user_id?: string;
+          uuid_fiscal?: string | null;
+          xml_url?: string | null;
+        };
         Relationships: [
           {
-            foreignKeyName: "invoices_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
+            foreignKeyName: "invoices_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "invoices_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
+            foreignKeyName: "invoices_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       notifications: {
         Row: {
-          body: string | null
-          created_at: string
-          id: string
-          kind: string
-          read_at: string | null
-          title: string
-          user_id: string
-        }
+          body: string | null;
+          created_at: string;
+          id: string;
+          kind: string;
+          read_at: string | null;
+          title: string;
+          user_id: string;
+        };
         Insert: {
-          body?: string | null
-          created_at?: string
-          id?: string
-          kind?: string
-          read_at?: string | null
-          title: string
-          user_id: string
-        }
+          body?: string | null;
+          created_at?: string;
+          id?: string;
+          kind?: string;
+          read_at?: string | null;
+          title: string;
+          user_id: string;
+        };
         Update: {
-          body?: string | null
-          created_at?: string
-          id?: string
-          kind?: string
-          read_at?: string | null
-          title?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
+          body?: string | null;
+          created_at?: string;
+          id?: string;
+          kind?: string;
+          read_at?: string | null;
+          title?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       payments: {
         Row: {
-          amount: number
-          created_at: string
-          id: string
-          invoice_id: string | null
-          paid_at: string
-          payment_form: string | null
-          reference: string | null
-          user_id: string
-        }
+          amount: number;
+          created_at: string;
+          id: string;
+          invoice_id: string | null;
+          paid_at: string;
+          payment_form: string | null;
+          reference: string | null;
+          user_id: string;
+        };
         Insert: {
-          amount?: number
-          created_at?: string
-          id?: string
-          invoice_id?: string | null
-          paid_at?: string
-          payment_form?: string | null
-          reference?: string | null
-          user_id: string
-        }
+          amount?: number;
+          created_at?: string;
+          id?: string;
+          invoice_id?: string | null;
+          paid_at?: string;
+          payment_form?: string | null;
+          reference?: string | null;
+          user_id: string;
+        };
         Update: {
-          amount?: number
-          created_at?: string
-          id?: string
-          invoice_id?: string | null
-          paid_at?: string
-          payment_form?: string | null
-          reference?: string | null
-          user_id?: string
-        }
+          amount?: number;
+          created_at?: string;
+          id?: string;
+          invoice_id?: string | null;
+          paid_at?: string;
+          payment_form?: string | null;
+          reference?: string | null;
+          user_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "payments_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
+            foreignKeyName: "payments_invoice_id_fkey";
+            columns: ["invoice_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       plans: {
         Row: {
-          created_at: string
-          facturas_incluidas: number
-          features: Json
-          id: string
-          is_active: boolean
-          key: string
-          nombre: string
-          precio_mxn: number
-          stripe_price_id: string | null
-        }
+          created_at: string;
+          facturas_incluidas: number;
+          features: Json;
+          id: string;
+          is_active: boolean;
+          key: string;
+          nombre: string;
+          precio_mxn: number;
+          stripe_price_id: string | null;
+        };
         Insert: {
-          created_at?: string
-          facturas_incluidas: number
-          features?: Json
-          id?: string
-          is_active?: boolean
-          key: string
-          nombre: string
-          precio_mxn: number
-          stripe_price_id?: string | null
-        }
+          created_at?: string;
+          facturas_incluidas: number;
+          features?: Json;
+          id?: string;
+          is_active?: boolean;
+          key: string;
+          nombre: string;
+          precio_mxn: number;
+          stripe_price_id?: string | null;
+        };
         Update: {
-          created_at?: string
-          facturas_incluidas?: number
-          features?: Json
-          id?: string
-          is_active?: boolean
-          key?: string
-          nombre?: string
-          precio_mxn?: number
-          stripe_price_id?: string | null
-        }
-        Relationships: []
-      }
+          created_at?: string;
+          facturas_incluidas?: number;
+          features?: Json;
+          id?: string;
+          is_active?: boolean;
+          key?: string;
+          nombre?: string;
+          precio_mxn?: number;
+          stripe_price_id?: string | null;
+        };
+        Relationships: [];
+      };
       products: {
         Row: {
-          category: string | null
-          company_id: string | null
-          created_at: string
-          description: string
-          id: string
-          internal_code: string | null
-          is_active: boolean
-          iva_rate: number
-          sat_key: string
-          sat_unit: string
-          unit_price: number
-          updated_at: string
-          user_id: string
-        }
+          category: string | null;
+          company_id: string | null;
+          created_at: string;
+          description: string;
+          id: string;
+          internal_code: string | null;
+          is_active: boolean;
+          iva_rate: number;
+          sat_key: string;
+          sat_unit: string;
+          unit_price: number;
+          updated_at: string;
+          user_id: string;
+        };
         Insert: {
-          category?: string | null
-          company_id?: string | null
-          created_at?: string
-          description: string
-          id?: string
-          internal_code?: string | null
-          is_active?: boolean
-          iva_rate?: number
-          sat_key: string
-          sat_unit: string
-          unit_price?: number
-          updated_at?: string
-          user_id: string
-        }
+          category?: string | null;
+          company_id?: string | null;
+          created_at?: string;
+          description: string;
+          id?: string;
+          internal_code?: string | null;
+          is_active?: boolean;
+          iva_rate?: number;
+          sat_key: string;
+          sat_unit: string;
+          unit_price?: number;
+          updated_at?: string;
+          user_id: string;
+        };
         Update: {
-          category?: string | null
-          company_id?: string | null
-          created_at?: string
-          description?: string
-          id?: string
-          internal_code?: string | null
-          is_active?: boolean
-          iva_rate?: number
-          sat_key?: string
-          sat_unit?: string
-          unit_price?: number
-          updated_at?: string
-          user_id?: string
-        }
+          category?: string | null;
+          company_id?: string | null;
+          created_at?: string;
+          description?: string;
+          id?: string;
+          internal_code?: string | null;
+          is_active?: boolean;
+          iva_rate?: number;
+          sat_key?: string;
+          sat_unit?: string;
+          unit_price?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "products_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
+            foreignKeyName: "products_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       settings: {
         Row: {
-          biometrics_enabled: boolean
-          default_cfdi_use: string | null
-          default_payment_form: string | null
-          default_payment_method: string | null
-          notifications_enabled: boolean
-          pin_enabled: boolean
-          theme: string
-          updated_at: string
-          user_id: string
-        }
+          biometrics_enabled: boolean;
+          default_cfdi_use: string | null;
+          default_payment_form: string | null;
+          default_payment_method: string | null;
+          notifications_enabled: boolean;
+          pin_enabled: boolean;
+          theme: string;
+          updated_at: string;
+          user_id: string;
+        };
         Insert: {
-          biometrics_enabled?: boolean
-          default_cfdi_use?: string | null
-          default_payment_form?: string | null
-          default_payment_method?: string | null
-          notifications_enabled?: boolean
-          pin_enabled?: boolean
-          theme?: string
-          updated_at?: string
-          user_id: string
-        }
+          biometrics_enabled?: boolean;
+          default_cfdi_use?: string | null;
+          default_payment_form?: string | null;
+          default_payment_method?: string | null;
+          notifications_enabled?: boolean;
+          pin_enabled?: boolean;
+          theme?: string;
+          updated_at?: string;
+          user_id: string;
+        };
         Update: {
-          biometrics_enabled?: boolean
-          default_cfdi_use?: string | null
-          default_payment_form?: string | null
-          default_payment_method?: string | null
-          notifications_enabled?: boolean
-          pin_enabled?: boolean
-          theme?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
+          biometrics_enabled?: boolean;
+          default_cfdi_use?: string | null;
+          default_payment_form?: string | null;
+          default_payment_method?: string | null;
+          notifications_enabled?: boolean;
+          pin_enabled?: boolean;
+          theme?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       stamp_transactions: {
         Row: {
-          amount: number
-          company_id: string
-          created_at: string
-          id: string
-          reference_id: string | null
-          subscription_id: string | null
-          type: string
-        }
+          amount: number;
+          company_id: string;
+          created_at: string;
+          id: string;
+          reference_id: string | null;
+          subscription_id: string | null;
+          type: string;
+        };
         Insert: {
-          amount: number
-          company_id: string
-          created_at?: string
-          id?: string
-          reference_id?: string | null
-          subscription_id?: string | null
-          type: string
-        }
+          amount: number;
+          company_id: string;
+          created_at?: string;
+          id?: string;
+          reference_id?: string | null;
+          subscription_id?: string | null;
+          type: string;
+        };
         Update: {
-          amount?: number
-          company_id?: string
-          created_at?: string
-          id?: string
-          reference_id?: string | null
-          subscription_id?: string | null
-          type?: string
-        }
+          amount?: number;
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          reference_id?: string | null;
+          subscription_id?: string | null;
+          type?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "stamp_transactions_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
+            foreignKeyName: "stamp_transactions_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "stamp_transactions_subscription_id_fkey"
-            columns: ["subscription_id"]
-            isOneToOne: false
-            referencedRelation: "subscriptions"
-            referencedColumns: ["id"]
+            foreignKeyName: "stamp_transactions_subscription_id_fkey";
+            columns: ["subscription_id"];
+            isOneToOne: false;
+            referencedRelation: "subscriptions";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       stamp_wallets: {
         Row: {
-          balance: number
-          company_id: string
-          updated_at: string
-        }
+          balance: number;
+          company_id: string;
+          reserved_stamps: number;
+          updated_at: string;
+        };
         Insert: {
-          balance?: number
-          company_id: string
-          updated_at?: string
-        }
+          balance?: number;
+          company_id: string;
+          reserved_stamps?: number;
+          updated_at?: string;
+        };
         Update: {
-          balance?: number
-          company_id?: string
-          updated_at?: string
-        }
+          balance?: number;
+          company_id?: string;
+          reserved_stamps?: number;
+          updated_at?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "stamp_wallets_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: true
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
+            foreignKeyName: "stamp_wallets_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: true;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       subscriptions: {
         Row: {
-          cancel_at_period_end: boolean
-          company_id: string
-          created_at: string
-          current_period_end: string | null
-          current_period_start: string | null
-          id: string
-          plan_id: string
-          status: string
-          stripe_customer_id: string | null
-          stripe_subscription_id: string | null
-          updated_at: string
-        }
+          cancel_at_period_end: boolean;
+          company_id: string;
+          created_at: string;
+          current_period_end: string | null;
+          current_period_start: string | null;
+          id: string;
+          plan_id: string;
+          status: string;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          updated_at: string;
+        };
         Insert: {
-          cancel_at_period_end?: boolean
-          company_id: string
-          created_at?: string
-          current_period_end?: string | null
-          current_period_start?: string | null
-          id?: string
-          plan_id: string
-          status?: string
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          updated_at?: string
-        }
+          cancel_at_period_end?: boolean;
+          company_id: string;
+          created_at?: string;
+          current_period_end?: string | null;
+          current_period_start?: string | null;
+          id?: string;
+          plan_id: string;
+          status?: string;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          updated_at?: string;
+        };
         Update: {
-          cancel_at_period_end?: boolean
-          company_id?: string
-          created_at?: string
-          current_period_end?: string | null
-          current_period_start?: string | null
-          id?: string
-          plan_id?: string
-          status?: string
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          updated_at?: string
-        }
+          cancel_at_period_end?: boolean;
+          company_id?: string;
+          created_at?: string;
+          current_period_end?: string | null;
+          current_period_start?: string | null;
+          id?: string;
+          plan_id?: string;
+          status?: string;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          updated_at?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "subscriptions_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: true
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
+            foreignKeyName: "subscriptions_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: true;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "subscriptions_plan_id_fkey"
-            columns: ["plan_id"]
-            isOneToOne: false
-            referencedRelation: "plans"
-            referencedColumns: ["id"]
+            foreignKeyName: "subscriptions_plan_id_fkey";
+            columns: ["plan_id"];
+            isOneToOne: false;
+            referencedRelation: "plans";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       user_roles: {
         Row: {
-          created_at: string
-          id: string
-          role: Database["public"]["Enums"]["app_role"]
-          user_id: string
-        }
+          created_at: string;
+          id: string;
+          role: Database["public"]["Enums"]["app_role"];
+          user_id: string;
+        };
         Insert: {
-          created_at?: string
-          id?: string
-          role?: Database["public"]["Enums"]["app_role"]
-          user_id: string
-        }
+          created_at?: string;
+          id?: string;
+          role?: Database["public"]["Enums"]["app_role"];
+          user_id: string;
+        };
         Update: {
-          created_at?: string
-          id?: string
-          role?: Database["public"]["Enums"]["app_role"]
-          user_id?: string
-        }
-        Relationships: []
-      }
-    }
+          created_at?: string;
+          id?: string;
+          role?: Database["public"]["Enums"]["app_role"];
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+    };
     Views: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     Functions: {
+      claim_cfdi_stamp: {
+        Args: { p_invoice_id: string };
+        Returns: boolean;
+      };
+      finalize_cfdi_cancellation: {
+        Args: {
+          p_cancelled: boolean;
+          p_cancelled_at: string | null;
+          p_invoice_id: string;
+          p_motive: string;
+          p_pac_response: Json;
+          p_request_date: string | null;
+          p_uuid_replacement: string | null;
+        };
+        Returns: undefined;
+      };
+      mark_cfdi_stamp_reconciliation_required: {
+        Args: { p_error: string; p_invoice_id: string };
+        Returns: undefined;
+      };
+      release_cfdi_stamp_claim: {
+        Args: { p_error: string; p_invoice_id: string };
+        Returns: undefined;
+      };
       has_role: {
         Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
-        Returns: boolean
-      }
-    }
+          _role: Database["public"]["Enums"]["app_role"];
+          _user_id: string;
+        };
+        Returns: boolean;
+      };
+    };
     Enums: {
-      app_role: "admin" | "user"
-      invoice_status: "draft" | "issued" | "cancelled" | "error"
-    }
+      app_role: "admin" | "user";
+      invoice_status: "draft" | "issued" | "cancelled" | "error";
+    };
     CompositeTypes: {
-      [_ in never]: never
-    }
-  }
-}
+      [_ in never]: never;
+    };
+  };
+};
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">];
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
       DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R
+      Row: infer R;
     }
     ? R
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R;
       }
       ? R
       : never
-    : never
+    : never;
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
+      Insert: infer I;
     }
     ? I
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
+        Insert: infer I;
       }
       ? I
       : never
-    : never
+    : never;
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
+      Update: infer U;
     }
     ? U
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
+        Update: infer U;
       }
       ? U
       : never
-    : never
+    : never;
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
+    : never;
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
+    : never;
 
 export const Constants = {
   public: {
@@ -853,4 +902,4 @@ export const Constants = {
       invoice_status: ["draft", "issued", "cancelled", "error"],
     },
   },
-} as const
+} as const;

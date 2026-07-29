@@ -54,7 +54,9 @@ function OnboardingPage() {
       setEmail((prev) => prev || u.user!.email || "");
       const { data: comp } = await supabase
         .from("companies")
-        .select("id, rfc, legal_name, tax_regime, postal_code, trade_name, phone, email, logo_url, onboarding_completed")
+        .select(
+          "id, rfc, legal_name, tax_regime, postal_code, trade_name, phone, email, logo_url, onboarding_completed",
+        )
         .eq("user_id", u.user.id)
         .maybeSingle();
       if (comp) {
@@ -81,7 +83,10 @@ function OnboardingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const stepAValid = useMemo(() => Object.keys(validateStepA({ rfc, legalName, taxRegime, postalCode })).length === 0, [rfc, legalName, taxRegime, postalCode]);
+  const stepAValid = useMemo(
+    () => Object.keys(validateStepA({ rfc, legalName, taxRegime, postalCode })).length === 0,
+    [rfc, legalName, taxRegime, postalCode],
+  );
 
   function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -161,7 +166,9 @@ function OnboardingPage() {
       <div className="mx-auto w-full max-w-2xl">
         <header className="mb-8 text-[#C2E8FF]">
           <div className="flex items-center gap-2">
-            <div className="grid size-9 place-items-center rounded-xl bg-[#C2E8FF] font-bold text-[#011025]">F</div>
+            <div className="grid size-9 place-items-center rounded-xl bg-[#C2E8FF] font-bold text-[#011025]">
+              F
+            </div>
             <span className="font-semibold tracking-tight">Factio</span>
           </div>
           <h1 className="mt-6 text-3xl font-bold tracking-tight text-white">
@@ -185,15 +192,18 @@ function OnboardingPage() {
                 Como aparecen en tu Constancia de Situación Fiscal. Obligatorios para poder timbrar.
               </p>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="RFC"
-                  required
-                  error={attempted ? errors.rfc : undefined}
-                >
+                <Field label="RFC" required error={attempted ? errors.rfc : undefined}>
                   <input
                     value={rfc}
                     onChange={(e) => setRfc(e.target.value.toUpperCase())}
-                    onBlur={() => setErrors((prev) => ({ ...prev, ...pickErrors(validateStepA({ rfc, legalName, taxRegime, postalCode }), ["rfc"]) }))}
+                    onBlur={() =>
+                      setErrors((prev) => ({
+                        ...prev,
+                        ...pickErrors(validateStepA({ rfc, legalName, taxRegime, postalCode }), [
+                          "rfc",
+                        ]),
+                      }))
+                    }
                     placeholder="XAXX010101000"
                     maxLength={13}
                     className={inputCls(attempted && !!errors.rfc)}
@@ -207,7 +217,14 @@ function OnboardingPage() {
                   <input
                     value={postalCode}
                     onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                    onBlur={() => setErrors((prev) => ({ ...prev, ...pickErrors(validateStepA({ rfc, legalName, taxRegime, postalCode }), ["postal_code"]) }))}
+                    onBlur={() =>
+                      setErrors((prev) => ({
+                        ...prev,
+                        ...pickErrors(validateStepA({ rfc, legalName, taxRegime, postalCode }), [
+                          "postal_code",
+                        ]),
+                      }))
+                    }
                     placeholder="06600"
                     inputMode="numeric"
                     className={inputCls(attempted && !!errors.postal_code)}
@@ -224,7 +241,12 @@ function OnboardingPage() {
                     onChange={(e) => setLegalName(e.target.value)}
                     onBlur={() => {
                       setLegalName((v) => normalizeFiscalName(v));
-                      setErrors((prev) => ({ ...prev, ...pickErrors(validateStepA({ rfc, legalName, taxRegime, postalCode }), ["legal_name"]) }));
+                      setErrors((prev) => ({
+                        ...prev,
+                        ...pickErrors(validateStepA({ rfc, legalName, taxRegime, postalCode }), [
+                          "legal_name",
+                        ]),
+                      }));
                     }}
                     placeholder="JUAN PEREZ LOPEZ"
                     className={inputCls(attempted && !!errors.legal_name)}
@@ -290,7 +312,11 @@ function OnboardingPage() {
                   <div className="flex items-center gap-3">
                     <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-xl border border-input bg-muted">
                       {logoPreview ? (
-                        <img src={logoPreview} alt="Vista previa del logo" className="size-full object-contain" />
+                        <img
+                          src={logoPreview}
+                          alt="Vista previa del logo"
+                          className="size-full object-contain"
+                        />
                       ) : (
                         <ImageIcon className="size-6 text-muted-foreground" />
                       )}
@@ -298,7 +324,12 @@ function OnboardingPage() {
                     <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-4 py-2 text-xs font-medium hover:bg-accent">
                       <Upload className="size-4" />
                       {logoFile ? "Cambiar logo" : "Subir logo"}
-                      <input type="file" accept="image/*" className="hidden" onChange={onLogoChange} />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={onLogoChange}
+                      />
                     </label>
                     {logoFile && (
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
@@ -323,7 +354,11 @@ function OnboardingPage() {
                 disabled={loading || (attempted && !stepAValid)}
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#011025] px-6 py-3 text-sm font-semibold text-[#C2E8FF] shadow-lg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {loading ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
+                {loading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="size-4" />
+                )}
                 Continuar al paso 2
               </button>
             </div>
@@ -353,23 +388,34 @@ function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: s
       const f = e.target.files?.[0] ?? null;
       setErrors((prev) => ({ ...prev, [kind]: undefined }));
       if (!f) {
-        kind === "cer" ? setCerFile(null) : setKeyFile(null);
+        if (kind === "cer") setCerFile(null);
+        else setKeyFile(null);
         return;
       }
       if (f.size > 512 * 1024) {
-        setErrors((prev) => ({ ...prev, [kind]: `El archivo .${kind} es demasiado grande (máx 512 KB).` }));
+        setErrors((prev) => ({
+          ...prev,
+          [kind]: `El archivo .${kind} es demasiado grande (máx 512 KB).`,
+        }));
         return;
       }
       const ext = f.name.split(".").pop()?.toLowerCase();
       if (kind === "cer" && ext !== "cer") {
-        setErrors((prev) => ({ ...prev, cer: "Selecciona el archivo con extensión .cer del SAT." }));
+        setErrors((prev) => ({
+          ...prev,
+          cer: "Selecciona el archivo con extensión .cer del SAT.",
+        }));
         return;
       }
       if (kind === "key" && ext !== "key") {
-        setErrors((prev) => ({ ...prev, key: "Selecciona el archivo con extensión .key del SAT." }));
+        setErrors((prev) => ({
+          ...prev,
+          key: "Selecciona el archivo con extensión .key del SAT.",
+        }));
         return;
       }
-      kind === "cer" ? setCerFile(f) : setKeyFile(f);
+      if (kind === "cer") setCerFile(f);
+      else setKeyFile(f);
     };
   }
 
@@ -387,9 +433,10 @@ function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: s
 
     setSaving(true);
     try {
-      // 1) Subir archivos al bucket privado csd-files en rutas deterministas
-      const cerPath = `${userId}/${companyId}/cert.cer`;
-      const keyPath = `${userId}/${companyId}/key.key`;
+      // Los archivos se guardan temporalmente hasta que Facturama acepte el CSD.
+      const stagingId = crypto.randomUUID();
+      const cerPath = `${userId}/csd-staging/${stagingId}/cert.cer`;
+      const keyPath = `${userId}/csd-staging/${stagingId}/key.key`;
 
       const [cerUp, keyUp] = await Promise.all([
         supabase.storage.from("csd-files").upload(cerPath, cerFile!, {
@@ -404,19 +451,12 @@ function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: s
       if (cerUp.error) throw cerUp.error;
       if (keyUp.error) throw keyUp.error;
 
-      // 2) Guardar rutas en companies
-      const { error: pathErr } = await supabase
-        .from("companies")
-        .update({ csd_cer_url: cerPath, csd_key_url: keyPath })
-        .eq("id", companyId);
-      if (pathErr) throw pathErr;
-
-      // 3) Validar en servidor vía Edge Function (nunca guardamos la contraseña)
+      // Valida y registra en Facturama en una sola operación del servidor.
       setSaving(false);
       setValidating(true);
 
-      const { data, error } = await supabase.functions.invoke("validar-csd", {
-        body: { company_id: companyId, password },
+      const { data, error } = await supabase.functions.invoke("validate-csd", {
+        body: { company_id: companyId, password, cer_path: cerPath, key_path: keyPath },
       });
       if (error) throw new Error(error.message || "No pudimos validar el CSD.");
 
@@ -452,7 +492,6 @@ function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: s
     }
   }
 
-
   const busy = validating || saving;
 
   return (
@@ -462,9 +501,12 @@ function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: s
           <Lock className="size-5" />
         </div>
         <div className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight">Paso 2 · Certificado de Sello Digital (CSD)</h2>
+          <h2 className="text-lg font-semibold tracking-tight">
+            Paso 2 · Certificado de Sello Digital (CSD)
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Sube tu archivo <strong>.cer</strong> y tu llave privada <strong>.key</strong> junto con su contraseña. Los validamos antes de guardarlos y nunca almacenamos la contraseña.
+            Sube tu archivo <strong>.cer</strong> y tu llave privada <strong>.key</strong> junto con
+            su contraseña. Los validamos antes de guardarlos y nunca almacenamos la contraseña.
           </p>
         </div>
       </div>
@@ -509,10 +551,13 @@ function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: s
             </button>
           </div>
           {errors.password && (
-            <span className="mt-1 block text-[11px] font-medium text-destructive">{errors.password}</span>
+            <span className="mt-1 block text-[11px] font-medium text-destructive">
+              {errors.password}
+            </span>
           )}
           <span className="mt-1 block text-[11px] text-muted-foreground">
-            Nunca guardamos tu contraseña. Se usa solo en el servidor para validar la llave y se descarta al terminar.
+            Nunca guardamos tu contraseña. Se usa solo en el servidor para validar la llave y se
+            descarta al terminar.
           </span>
         </label>
       </div>
@@ -575,12 +620,24 @@ function CsdFileField({
         </span>
         {file && !error && <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />}
       </div>
-      {error && <span className="mt-1 block text-[11px] font-medium text-destructive">{error}</span>}
+      {error && (
+        <span className="mt-1 block text-[11px] font-medium text-destructive">{error}</span>
+      )}
     </label>
   );
 }
 
-function StepDot({ n, label, active, done }: { n: number; label: string; active: boolean; done: boolean }) {
+function StepDot({
+  n,
+  label,
+  active,
+  done,
+}: {
+  n: number;
+  label: string;
+  active: boolean;
+  done: boolean;
+}) {
   return (
     <li
       className={`flex items-center gap-2 rounded-full border px-3 py-1.5 ${
@@ -618,30 +675,44 @@ function Field({
         {label} {required && <span className="text-destructive">*</span>}
       </span>
       {children}
-      {error && <span className="mt-1 block text-[11px] font-medium text-destructive">{error}</span>}
+      {error && (
+        <span className="mt-1 block text-[11px] font-medium text-destructive">{error}</span>
+      )}
     </label>
   );
 }
 
 function inputCls(hasError: boolean) {
   return `w-full rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[#023e7d]/30 ${
-    hasError ? "border-destructive text-destructive focus:border-destructive" : "border-input focus:border-[#023e7d]"
+    hasError
+      ? "border-destructive text-destructive focus:border-destructive"
+      : "border-input focus:border-[#023e7d]"
   }`;
 }
 
-function validateStepA(v: { rfc: string; legalName: string; taxRegime: string; postalCode: string }): StepAErrors {
+function validateStepA(v: {
+  rfc: string;
+  legalName: string;
+  taxRegime: string;
+  postalCode: string;
+}): StepAErrors {
   const e: StepAErrors = {};
   const rfcCheck = validateRfcStrict(v.rfc);
   if (!v.rfc.trim()) e.rfc = "El RFC es obligatorio.";
   else if (!rfcCheck.valid) e.rfc = rfcCheck.reason;
-  if (!v.legalName.trim()) e.legal_name = "Escribe tu nombre o razón social tal como aparece en la constancia.";
+  if (!v.legalName.trim())
+    e.legal_name = "Escribe tu nombre o razón social tal como aparece en la constancia.";
   if (!v.taxRegime) e.tax_regime = "Selecciona tu régimen fiscal.";
   if (!v.postalCode.trim()) e.postal_code = "El código postal es obligatorio.";
-  else if (!/^\d{5}$/.test(v.postalCode.trim())) e.postal_code = "El código postal debe tener 5 dígitos.";
+  else if (!/^\d{5}$/.test(v.postalCode.trim()))
+    e.postal_code = "El código postal debe tener 5 dígitos.";
   return e;
 }
 
-function pickErrors<T extends Record<string, string | undefined>>(all: T, keys: (keyof T)[]): Partial<T> {
+function pickErrors<T extends Record<string, string | undefined>>(
+  all: T,
+  keys: (keyof T)[],
+): Partial<T> {
   const out: Partial<T> = {};
   for (const k of keys) if (all[k]) out[k] = all[k];
   return out;

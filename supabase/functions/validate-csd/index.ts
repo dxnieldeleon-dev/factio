@@ -1,14 +1,29 @@
 // Edge Function: validate-csd
-// Recibe archivos .cer (base64) y .key (base64) más la contraseña de la llave privada,
-// intenta desencriptarla y verifica que el par coincida. NUNCA guarda la contraseña.
-import { createPrivateKey, createPublicKey, X509Certificate } from "node:crypto";
+// Validates CSD files stored in private Storage and registers them with Facturama.
+
 import { Buffer } from "node:buffer";
+import { createPrivateKey, createPublicKey, X509Certificate } from "node:crypto";
+import { encodeBase64 } from "jsr:@std/encoding/base64";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { uploadCsd } from "../_shared/facturama/client.ts";
+import { isFacturamaError } from "../_shared/facturama/errors.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+type CsdRequest = {
+  company_id?: unknown;
+  password?: unknown;
+  cer_path?: unknown;
+  key_path?: unknown;
+};
+
+type CsdValidation =
+  | { ok: true; serialNumber: string; validFrom: string; validTo: string }
+  | { ok: false; field: "cer" | "key" | "password"; error: string };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -17,122 +32,236 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function userClient(url: string, anonKey: string, token: string) {
+  return createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+}
+
+function isStoragePath(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && !value.includes("..");
+}
+
+function validateCsd(
+  certificate: Uint8Array,
+  privateKey: Uint8Array,
+  password: string,
+): CsdValidation {
+  let cert: X509Certificate;
+  try {
+    cert = new X509Certificate(Buffer.from(certificate));
+  } catch {
+    return { ok: false, field: "cer", error: "El archivo .cer no es un certificado X.509 válido." };
+  }
+
+  const validFrom = new Date(cert.validFrom);
+  const validTo = new Date(cert.validTo);
+  const now = new Date();
+  if (now < validFrom || now > validTo) {
+    return { ok: false, field: "cer", error: "El CSD no se encuentra vigente." };
+  }
+
+  let key: ReturnType<typeof createPrivateKey>;
+  try {
+    key = createPrivateKey({
+      key: Buffer.from(privateKey),
+      format: "der",
+      type: "pkcs8",
+      passphrase: password,
+    });
+  } catch (cause) {
+    const message = String(cause instanceof Error ? cause.message : cause).toLowerCase();
+    return {
+      ok: false,
+      field: /decrypt|passphrase|password|wrong tag/i.test(message) ? "password" : "key",
+      error: /decrypt|passphrase|password|wrong tag/i.test(message)
+        ? "La contraseña de la llave privada es incorrecta."
+        : "No fue posible leer la llave privada .key.",
+    };
+  }
+
+  const certificatePublicKey = cert.publicKey.export({ format: "der", type: "spki" });
+  const privatePublicKey = createPublicKey(key).export({ format: "der", type: "spki" });
+  if (!Buffer.from(certificatePublicKey).equals(Buffer.from(privatePublicKey))) {
+    return { ok: false, field: "key", error: "La llave privada no corresponde al certificado." };
+  }
+
+  return {
+    ok: true,
+    serialNumber: cert.serialNumber,
+    validFrom: validFrom.toISOString(),
+    validTo: validTo.toISOString(),
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
-  if (req.method !== "POST") return json({ valid: false, reason: "Método no permitido." }, 405);
+  if (req.method !== "POST") return json({ success: false, error: "Método no permitido." }, 405);
 
-  // Require an authenticated caller (JWT bearer). We don't need to fully verify
-  // the signature here — the Supabase gateway already validates the JWT against
-  // project keys before the function is invoked when verify_jwt is on; this is
-  // a defense-in-depth check for deployments where verify_jwt is off.
   const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-  if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
-    return json({ valid: false, reason: "No autenticado." }, 401);
+  if (!authHeader?.toLowerCase().startsWith("bearer ")) {
+    return json({ success: false, error: "No autenticado." }, 401);
   }
+
+  const url = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const token = authHeader.slice(7).trim();
-  if (!token || token.split(".").length !== 3) {
-    return json({ valid: false, reason: "Token inválido." }, 401);
+  if (!url || !anonKey || !token) {
+    return json({ success: false, error: "Configuración de autenticación incompleta." }, 500);
   }
 
+  const auth = createClient(url, anonKey);
+  const { data: authData, error: authError } = await auth.auth.getUser(token);
+  if (authError || !authData.user) return json({ success: false, error: "Sesión inválida." }, 401);
 
-
-  let payload: { cer_base64?: string; key_base64?: string; password?: string };
+  let payload: CsdRequest;
   try {
     payload = await req.json();
   } catch {
-    return json({ valid: false, reason: "Cuerpo de la petición inválido." }, 400);
+    return json({ success: false, error: "Cuerpo de la petición inválido." }, 400);
+  }
+  if (
+    typeof payload.company_id !== "string" ||
+    !payload.company_id ||
+    typeof payload.password !== "string" ||
+    !payload.password
+  ) {
+    return json({ success: false, error: "company_id y password son obligatorios." }, 400);
   }
 
-  const { cer_base64, key_base64, password } = payload ?? {};
-  if (!cer_base64) return json({ valid: false, field: "cer", reason: "Falta el archivo .cer." }, 400);
-  if (!key_base64) return json({ valid: false, field: "key", reason: "Falta el archivo .key." }, 400);
-  if (!password) return json({ valid: false, field: "password", reason: "Escribe la contraseña de la llave privada." }, 400);
+  const supabase = userClient(url, anonKey, token);
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .select("id, rfc, csd_cer_url, csd_key_url")
+    .eq("id", payload.company_id)
+    .eq("user_id", authData.user.id)
+    .maybeSingle();
+  if (companyError || !company)
+    return json({ success: false, error: "Empresa no encontrada." }, 404);
 
-  let cerDer: Buffer;
-  let keyDer: Buffer;
-  try {
-    cerDer = Buffer.from(cer_base64, "base64");
-    keyDer = Buffer.from(key_base64, "base64");
-  } catch {
-    return json({ valid: false, reason: "No pudimos leer los archivos enviados." }, 400);
+  const stagingPrefix = `${authData.user.id}/csd-staging/`;
+  const requestedPaths =
+    isStoragePath(payload.cer_path) && isStoragePath(payload.key_path)
+      ? { cer: payload.cer_path, key: payload.key_path }
+      : null;
+  if (
+    requestedPaths &&
+    (!requestedPaths.cer.startsWith(stagingPrefix) || !requestedPaths.key.startsWith(stagingPrefix))
+  ) {
+    return json({ success: false, error: "Las rutas temporales del CSD no son válidas." }, 400);
   }
 
-  // 1) Parse .cer (X.509 DER)
-  let cert: X509Certificate;
-  try {
-    cert = new X509Certificate(cerDer);
-  } catch {
-    return json({
-      valid: false,
-      field: "cer",
-      reason: "El archivo .cer no es un certificado X.509 válido. Verifica que sea el archivo correcto del SAT.",
-    });
-  }
-
-  const notBefore = new Date(cert.validFrom);
-  const notAfter = new Date(cert.validTo);
-  const now = new Date();
-  if (now < notBefore) {
-    return json({
-      valid: false,
-      field: "cer",
-      reason: `El certificado aún no es vigente (inicia el ${notBefore.toISOString().slice(0, 10)}).`,
-    });
-  }
-  if (now > notAfter) {
-    return json({
-      valid: false,
-      field: "cer",
-      reason: `El certificado venció el ${notAfter.toISOString().slice(0, 10)}. Solicita uno nuevo al SAT.`,
-    });
-  }
-
-  // 2) Desencriptar llave privada (PKCS#8 DER encriptada)
-  let privKey;
-  try {
-    privKey = createPrivateKey({ key: keyDer, format: "der", type: "pkcs8", passphrase: password });
-  } catch (err) {
-    const msg = String((err as Error)?.message ?? err).toLowerCase();
-    if (/bad decrypt|passphrase|password|decryption|unable to load|wrong tag/i.test(msg)) {
-      return json({
-        valid: false,
-        field: "password",
-        reason: "La contraseña de la llave privada es incorrecta.",
-      });
+  const sourceCerPath = requestedPaths?.cer ?? company.csd_cer_url;
+  const sourceKeyPath = requestedPaths?.key ?? company.csd_key_url;
+  const removeStagedFiles = async () => {
+    if (requestedPaths) {
+      await supabase.storage.from("csd-files").remove([requestedPaths.cer, requestedPaths.key]);
     }
-    return json({
-      valid: false,
-      field: "key",
-      reason: "No pudimos leer la llave privada (.key). Verifica que sea el archivo correcto del SAT en formato PKCS#8.",
-    });
+  };
+  if (!sourceCerPath || !sourceKeyPath) {
+    return json(
+      { success: false, field: "cer", error: "Debes cargar ambos archivos del CSD." },
+      400,
+    );
   }
 
-  // 3) Verificar que la llave corresponde al certificado
+  const [cerDownload, keyDownload] = await Promise.all([
+    supabase.storage.from("csd-files").download(sourceCerPath),
+    supabase.storage.from("csd-files").download(sourceKeyPath),
+  ]);
+  if (cerDownload.error || keyDownload.error || !cerDownload.data || !keyDownload.data) {
+    return json(
+      { success: false, error: "No fue posible leer los archivos privados del CSD." },
+      502,
+    );
+  }
+
+  const [cerBytes, keyBytes] = await Promise.all([
+    cerDownload.data.arrayBuffer().then((value) => new Uint8Array(value)),
+    keyDownload.data.arrayBuffer().then((value) => new Uint8Array(value)),
+  ]);
+  const validation = validateCsd(cerBytes, keyBytes, payload.password);
+  if (!validation.ok) {
+    await supabase
+      .from("companies")
+      .update({ csd_status: "error", csd_last_error: validation.error })
+      .eq("id", company.id);
+    await removeStagedFiles();
+    return json({ success: false, field: validation.field, error: validation.error });
+  }
+
   try {
-    const certPub = cert.publicKey.export({ format: "der", type: "spki" }) as Buffer;
-    const keyPub = createPublicKey(privKey).export({ format: "der", type: "spki" }) as Buffer;
-    if (!certPub.equals(keyPub)) {
-      return json({
-        valid: false,
-        field: "key",
-        reason: "La llave privada no corresponde al certificado. Asegúrate de que .cer y .key sean del mismo CSD.",
-      });
-    }
-  } catch {
+    await uploadCsd({
+      Rfc: company.rfc.trim().toUpperCase(),
+      Certificate: encodeBase64(cerBytes),
+      PrivateKey: encodeBase64(keyBytes),
+      PrivateKeyPassword: payload.password,
+    });
+  } catch (error) {
+    const message = isFacturamaError(error)
+      ? error.message
+      : "No fue posible cargar el CSD en Facturama.";
+    await supabase
+      .from("companies")
+      .update({ csd_status: "error", csd_last_error: message })
+      .eq("id", company.id);
+    await removeStagedFiles();
     return json({
-      valid: false,
-      field: "key",
-      reason: "No pudimos comparar la llave privada con el certificado.",
+      success: false,
+      error: message,
+      facturama_status: isFacturamaError(error) ? error.status : null,
+      facturama_response: isFacturamaError(error) ? error.pacResponse : null,
     });
   }
 
-  // 4) OK — devolver metadata pública (nunca la contraseña)
+  const finalCerPath = `${authData.user.id}/${company.id}/cert.cer`;
+  const finalKeyPath = `${authData.user.id}/${company.id}/key.key`;
+  if (requestedPaths) {
+    await supabase.storage.from("csd-files").remove([finalCerPath, finalKeyPath]);
+    const [cerCopy, keyCopy] = await Promise.all([
+      supabase.storage.from("csd-files").copy(sourceCerPath, finalCerPath),
+      supabase.storage.from("csd-files").copy(sourceKeyPath, finalKeyPath),
+    ]);
+    if (cerCopy.error || keyCopy.error) {
+      return json(
+        {
+          success: false,
+          error: "El CSD fue registrado en Facturama, pero no pudo guardarse en Factio.",
+        },
+        502,
+      );
+    }
+    await supabase.storage.from("csd-files").remove([sourceCerPath, sourceKeyPath]);
+  }
+
+  const { error: updateError } = await supabase
+    .from("companies")
+    .update({
+      csd_cer_url: finalCerPath,
+      csd_key_url: finalKeyPath,
+      csd_serial_number: validation.serialNumber,
+      csd_valid_from: validation.validFrom,
+      csd_valid_to: validation.validTo,
+      csd_status: "uploaded",
+      csd_uploaded_at: new Date().toISOString(),
+      csd_last_error: null,
+      onboarding_completed: true,
+    })
+    .eq("id", company.id);
+  if (updateError) {
+    return json(
+      {
+        success: false,
+        error: "El CSD fue registrado en Facturama, pero no se pudo actualizar la empresa.",
+      },
+      502,
+    );
+  }
+
   return json({
-    valid: true,
-    serial_number: cert.serialNumber,
-    subject: cert.subject,
-    issuer: cert.issuer,
-    valid_from: notBefore.toISOString(),
-    valid_to: notAfter.toISOString(),
+    success: true,
+    serial_number: validation.serialNumber,
+    valid_from: validation.validFrom,
+    valid_to: validation.validTo,
   });
 });

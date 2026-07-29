@@ -1,9 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Search, FileText, Download, Share2, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatMXN, formatDateMX } from "@/lib/format";
+import { openInvoiceDocument } from "@/lib/invoice-documents";
 import { StatusChip } from "./dashboard";
 import { EmptyState } from "@/components/empty-state";
 
@@ -14,7 +16,9 @@ export const Route = createFileRoute("/_authenticated/history")({
 async function loadInvoices() {
   const { data, error } = await supabase
     .from("invoices")
-    .select("id, series, folio, total, status, created_at, uuid_fiscal, client_snapshot, xml_url, pdf_url")
+    .select(
+      "id, series, folio, total, status, created_at, uuid_fiscal, client_snapshot, xml_url, pdf_url",
+    )
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw error;
@@ -24,7 +28,10 @@ async function loadInvoices() {
 type StatusFilter = "all" | "issued" | "cancelled";
 
 function History() {
-  const { data, isLoading } = useQuery({ queryKey: ["invoices", "history"], queryFn: loadInvoices });
+  const { data, isLoading } = useQuery({
+    queryKey: ["invoices", "history"],
+    queryFn: loadInvoices,
+  });
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const navigate = useNavigate();
@@ -34,16 +41,20 @@ function History() {
     if (!q) return true;
     const t = q.toLowerCase();
     const snap = (i.client_snapshot as { legal_name?: string; rfc?: string } | null) ?? {};
-    return (snap.legal_name ?? "").toLowerCase().includes(t)
-      || (snap.rfc ?? "").toLowerCase().includes(t)
-      || `${i.series}-${i.folio}`.toLowerCase().includes(t)
-      || (i.uuid_fiscal ?? "").toLowerCase().includes(t);
+    return (
+      (snap.legal_name ?? "").toLowerCase().includes(t) ||
+      (snap.rfc ?? "").toLowerCase().includes(t) ||
+      `${i.series}-${i.folio}`.toLowerCase().includes(t) ||
+      (i.uuid_fiscal ?? "").toLowerCase().includes(t)
+    );
   });
 
   return (
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
       <header>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Facturas</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Facturas
+        </p>
         <h1 className="text-2xl font-bold tracking-tight">Facturas</h1>
       </header>
 
@@ -58,16 +69,20 @@ function History() {
       </div>
 
       <div className="mt-3 flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        {([
-          ["all", "Todas"],
-          ["issued", "Vigentes"],
-          ["cancelled", "Canceladas"],
-        ] as const).map(([key, label]) => (
+        {(
+          [
+            ["all", "Todas"],
+            ["issued", "Vigentes"],
+            ["cancelled", "Canceladas"],
+          ] as const
+        ).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setStatus(key)}
             className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-              status === key ? "bg-foreground text-background" : "border border-border bg-surface text-muted-foreground"
+              status === key
+                ? "bg-foreground text-background"
+                : "border border-border bg-surface text-muted-foreground"
             }`}
           >
             {label}
@@ -77,13 +92,25 @@ function History() {
 
       <div className="mt-5">
         {isLoading ? (
-          <div className="space-y-3">{[0, 1, 2, 3].map((i) => <div key={i} className="h-20 animate-pulse rounded-2xl border border-border bg-surface" />)}</div>
+          <div className="space-y-3">
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-20 animate-pulse rounded-2xl border border-border bg-surface"
+              />
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
-          <EmptyState icon={FileText} title="Sin facturas" description="Cuando emitas facturas aparecerán aquí." />
+          <EmptyState
+            icon={FileText}
+            title="Sin facturas"
+            description="Cuando emitas facturas aparecerán aquí."
+          />
         ) : (
           <ul className="space-y-2">
             {filtered.map((inv) => {
-              const snap = (inv.client_snapshot as { legal_name?: string; rfc?: string } | null) ?? {};
+              const snap =
+                (inv.client_snapshot as { legal_name?: string; rfc?: string } | null) ?? {};
               return (
                 <li key={inv.id} className="rounded-2xl border border-border bg-surface p-4">
                   <button
@@ -94,7 +121,8 @@ function History() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold">{snap.legal_name ?? "Cliente"}</p>
                       <p className="mt-0.5 font-mono text-[10px] uppercase text-muted-foreground">
-                        {inv.series}-{String(inv.folio).padStart(6, "0")} · {formatDateMX(inv.created_at)}
+                        {inv.series}-{String(inv.folio).padStart(6, "0")} ·{" "}
+                        {formatDateMX(inv.created_at)}
                         {snap.rfc ? ` · ${snap.rfc}` : ""}
                       </p>
                     </div>
@@ -106,22 +134,30 @@ function History() {
                   </button>
                   <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
                     {inv.pdf_url && (
-                      <a
-                        href={inv.pdf_url}
-                        download={`${inv.series}-${inv.folio}.pdf`}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openInvoiceDocument(inv.pdf_url!).catch((error) =>
+                            toast.error(error.message),
+                          )
+                        }
                         className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-[11px] font-semibold"
                       >
                         <Download className="size-3" /> PDF
-                      </a>
+                      </button>
                     )}
                     {inv.xml_url && (
-                      <a
-                        href={inv.xml_url}
-                        download={`${inv.series}-${inv.folio}.xml`}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openInvoiceDocument(inv.xml_url!).catch((error) =>
+                            toast.error(error.message),
+                          )
+                        }
                         className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-[11px] font-semibold"
                       >
                         <Download className="size-3" /> XML
-                      </a>
+                      </button>
                     )}
                     {(inv.pdf_url || inv.xml_url) && (
                       <a
@@ -136,7 +172,6 @@ function History() {
                       </a>
                     )}
                   </div>
-
                 </li>
               );
             })}

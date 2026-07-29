@@ -4,7 +4,9 @@ import { useState } from "react";
 import { ArrowLeft, Copy, Download, Share2, Ban, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
 import { formatMXN, formatDateMX } from "@/lib/format";
+import { openInvoiceDocument } from "@/lib/invoice-documents";
 import { StatusChip } from "./dashboard";
 import {
   AlertDialog,
@@ -33,13 +35,15 @@ async function loadInvoice(id: string) {
     supabase
       .from("invoices")
       .select(
-        "id, series, folio, total, subtotal, iva_total, status, created_at, issued_at, uuid_fiscal, client_snapshot, xml_url, pdf_url, payment_method, payment_form, cfdi_use, currency, cancellation_reason, cancelled_at",
+        "id, series, folio, total, subtotal, iva_total, status, created_at, issued_at, uuid_fiscal, client_snapshot, xml_url, pdf_url, payment_method, payment_form, cfdi_use, currency, cancellation_reason, cancellation_status, cancellation_requested_at, cancellation_replacement_uuid, cancelled_at",
       )
       .eq("id", id)
       .maybeSingle(),
     supabase
       .from("invoice_items")
-      .select("id, description, quantity, unit_price, discount, iva_rate, iva_amount, amount, sat_key, sat_unit")
+      .select(
+        "id, description, quantity, unit_price, discount, iva_rate, iva_amount, amount, sat_key, sat_unit",
+      )
       .eq("invoice_id", id)
       .order("position"),
   ]);
@@ -60,9 +64,12 @@ function InvoiceDetail() {
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [reason, setReason] = useState(CANCEL_REASONS[0].code);
+  const [replacementUuid, setReplacementUuid] = useState("");
   const [cancelling, setCancelling] = useState(false);
 
-  const folioFmt = data ? `${data.invoice.series}-${String(data.invoice.folio).padStart(6, "0")}` : "";
+  const folioFmt = data
+    ? `${data.invoice.series}-${String(data.invoice.folio).padStart(6, "0")}`
+    : "";
 
   async function copyUuid() {
     if (!data?.invoice.uuid_fiscal) return;
@@ -76,22 +83,37 @@ function InvoiceDetail() {
 
   async function confirmCancel() {
     if (!data) return;
+    if (reason === "01" && !replacementUuid.trim()) {
+      toast.error("El motivo 01 requiere el UUID del CFDI sustituto");
+      return;
+    }
     setCancelling(true);
     try {
-      const { error } = await supabase
-        .from("invoices")
-        .update({
-          status: "cancelled",
-          cancellation_reason: reason,
-          cancelled_at: new Date().toISOString(),
-        })
-        .eq("id", data.invoice.id);
-      if (error) throw error;
-      toast.success("Factura cancelada");
+      const { data: response, error } = await supabase.functions.invoke("facturama-cancel-cfdi", {
+        body: {
+          invoice_id: data.invoice.id,
+          motive: reason,
+          ...(reason === "01" ? { uuid_replacement: replacementUuid.trim() } : {}),
+        },
+      });
+      if (error) {
+        throw new Error(
+          await getEdgeFunctionErrorMessage(error, "No fue posible cancelar el CFDI."),
+        );
+      }
+      if (!response?.ok) {
+        throw new Error(response?.reason ?? "No fue posible cancelar el CFDI.");
+      }
+      toast.success(
+        response.cancelled
+          ? "Factura cancelada ante el PAC"
+          : "Solicitud de cancelación enviada; está pendiente de aceptación",
+      );
       setConfirmOpen(false);
+      setReplacementUuid("");
       qc.invalidateQueries({ queryKey: ["invoices", "history"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
-      refetch();
+      await refetch();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No pudimos cancelar");
     } finally {
@@ -129,6 +151,7 @@ function InvoiceDetail() {
   const snap = (inv.client_snapshot as { legal_name?: string; rfc?: string } | null) ?? {};
   const isIssued = inv.status === "issued";
   const isCancelled = inv.status === "cancelled";
+  const cancellationPending = inv.cancellation_status === "pending";
 
   return (
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-10">
@@ -141,18 +164,27 @@ function InvoiceDetail() {
           <ArrowLeft className="size-4" />
         </button>
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Detalle de factura</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Detalle de factura
+          </p>
           <h1 className="font-mono text-lg font-bold tracking-tight">{folioFmt}</h1>
         </div>
       </header>
 
       <section className="mt-5 rounded-2xl border border-border bg-surface px-5 py-4">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Estado</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Estado
+        </h2>
         <div className="mt-2 flex items-center gap-2">
           <StatusChip status={inv.status} />
         </div>
         {isCancelled && inv.cancellation_reason && (
           <p className="mt-2 text-xs text-destructive">Motivo: {inv.cancellation_reason}</p>
+        )}
+        {cancellationPending && (
+          <p className="mt-2 text-xs text-amber-700">
+            Solicitud de cancelación enviada al PAC; pendiente de aceptación.
+          </p>
         )}
         {inv.uuid_fiscal && (
           <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
@@ -170,13 +202,17 @@ function InvoiceDetail() {
       </section>
 
       <section className="mt-3 rounded-2xl border border-border bg-surface px-5 py-4">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Receptor</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Receptor
+        </h2>
         <p className="mt-2 font-semibold">{snap.legal_name ?? "—"}</p>
         <p className="mt-0.5 font-mono text-xs text-muted-foreground">{snap.rfc ?? "—"}</p>
       </section>
 
       <section className="mt-3 rounded-2xl border border-border bg-surface px-5 py-4">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Datos fiscales</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Datos fiscales
+        </h2>
         <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
           <div>
             <dt className="text-muted-foreground">Uso CFDI</dt>
@@ -204,7 +240,9 @@ function InvoiceDetail() {
       </section>
 
       <section className="mt-3 rounded-2xl border border-border bg-surface px-5 py-4">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Conceptos</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Conceptos
+        </h2>
         {data.items.length === 0 ? (
           <p className="mt-2 text-xs text-muted-foreground">Sin conceptos.</p>
         ) : (
@@ -242,25 +280,31 @@ function InvoiceDetail() {
 
       {isIssued && (
         <section className="mt-5 space-y-2">
-          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Acciones</h2>
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Acciones
+          </h2>
           <div className="flex flex-wrap gap-2">
             {inv.xml_url && (
-              <a
-                href={inv.xml_url}
-                download={`${folioFmt}.xml`}
+              <button
+                type="button"
+                onClick={() =>
+                  openInvoiceDocument(inv.xml_url!).catch((error) => toast.error(error.message))
+                }
                 className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold"
               >
                 <Download className="size-3.5" /> XML
-              </a>
+              </button>
             )}
             {inv.pdf_url && (
-              <a
-                href={inv.pdf_url}
-                download={`${folioFmt}.pdf`}
+              <button
+                type="button"
+                onClick={() =>
+                  openInvoiceDocument(inv.pdf_url!).catch((error) => toast.error(error.message))
+                }
                 className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold"
               >
                 <Download className="size-3.5" /> PDF
-              </a>
+              </button>
             )}
             {(inv.pdf_url || inv.xml_url) && (
               <a
@@ -288,13 +332,19 @@ function InvoiceDetail() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Cancelar esta factura?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción no se puede deshacer. La factura quedará marcada como cancelada. En producción se enviará la
-              solicitud al SAT.
+            <AlertDialogDescription className="hidden">
+              Esta acción no se puede deshacer. La factura quedará marcada como cancelada. En
+              producción se enviará la solicitud al SAT.
             </AlertDialogDescription>
+            <p className="text-sm text-muted-foreground">
+              La solicitud se enviará a Facturama y al PAC. La factura sólo se marcará como
+              cancelada si el PAC confirma la cancelación.
+            </p>
           </AlertDialogHeader>
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground">Motivo de cancelación</label>
+            <label className="text-xs font-semibold text-muted-foreground">
+              Motivo de cancelación
+            </label>
             <select
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -306,6 +356,19 @@ function InvoiceDetail() {
                 </option>
               ))}
             </select>
+            {reason === "01" && (
+              <div className="space-y-2 pt-2">
+                <label className="text-xs font-semibold text-muted-foreground">
+                  UUID del CFDI sustituto
+                </label>
+                <input
+                  value={replacementUuid}
+                  onChange={(event) => setReplacementUuid(event.target.value)}
+                  placeholder="00000000-0000-0000-0000-000000000000"
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 font-mono text-sm focus:border-primary focus:outline-none focus:ring-4 focus:ring-ring"
+                />
+              </div>
+            )}
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={cancelling}>Mantener factura</AlertDialogCancel>
