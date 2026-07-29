@@ -1,7 +1,18 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Bell, TrendingUp, Users as UsersIcon, FileText, LogOut, ChevronRight, ShieldAlert, X, Zap } from "lucide-react";
+import {
+  Plus,
+  Bell,
+  TrendingUp,
+  Users as UsersIcon,
+  FileText,
+  LogOut,
+  ChevronRight,
+  ShieldAlert,
+  X,
+  Zap,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 import { formatMXN, formatDateMX } from "@/lib/format";
@@ -30,7 +41,6 @@ interface DashboardData {
   facturasIncluidas: number | null;
 }
 
-
 async function loadDashboard(): Promise<DashboardData> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData.user?.id;
@@ -50,21 +60,43 @@ async function loadDashboard(): Promise<DashboardData> {
   const companyId = companyRes.data?.id;
 
   const [todayRes, monthRes, clientsRes, recentRes, walletRes, subRes] = await Promise.all([
-    supabase.from("invoices").select("id", { count: "exact", head: true }).eq("status", "issued").gte("created_at", startOfDay),
-    supabase.from("invoices").select("total").eq("status", "issued").gte("created_at", startOfMonth),
+    supabase
+      .from("invoices")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "issued")
+      .gte("created_at", startOfDay),
+    supabase
+      .from("invoices")
+      .select("total")
+      .eq("status", "issued")
+      .gte("created_at", startOfMonth),
     supabase.from("clients").select("id", { count: "exact", head: true }),
-    supabase.from("invoices").select("id, series, folio, total, status, created_at, client_snapshot").order("created_at", { ascending: false }).limit(5),
+    supabase
+      .from("invoices")
+      .select("id, series, folio, total, status, created_at, client_snapshot")
+      .order("created_at", { ascending: false })
+      .limit(5),
     companyId
       ? supabase.from("stamp_wallets").select("balance").eq("company_id", companyId).maybeSingle()
       : Promise.resolve({ data: null }),
     companyId
-      ? supabase.from("subscriptions").select("status, plan:plans(facturas_incluidas)").eq("company_id", companyId).maybeSingle()
+      ? supabase
+          .from("subscriptions")
+          .select("status, plan:plans(facturas_incluidas)")
+          .eq("company_id", companyId)
+          .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
 
   const monthTotal = (monthRes.data ?? []).reduce((a, r) => a + Number(r.total ?? 0), 0);
   const c = companyRes.data;
-  const csdReady = !!(c?.csd_cer_url && c?.csd_key_url && c?.csd_serial_number && c?.csd_valid_to && new Date(c.csd_valid_to) > new Date());
+  const csdReady = !!(
+    c?.csd_cer_url &&
+    c?.csd_key_url &&
+    c?.csd_serial_number &&
+    c?.csd_valid_to &&
+    new Date(c.csd_valid_to) > new Date()
+  );
 
   const subStatus = (subRes.data as { status?: string } | null)?.status;
   const hasActiveSubscription = subStatus === "active" || subStatus === "trialing";
@@ -81,7 +113,6 @@ async function loadDashboard(): Promise<DashboardData> {
     stampBalance: (walletRes.data as { balance?: number } | null)?.balance ?? null,
     facturasIncluidas: planData?.facturas_incluidas ?? null,
   };
-
 }
 
 function Dashboard() {
@@ -93,7 +124,11 @@ function Dashboard() {
   });
   function dismissCsd() {
     setCsdDismissed(true);
-    try { window.localStorage.setItem("ff.csdBannerDismissed", "1"); } catch {}
+    try {
+      window.localStorage.setItem("ff.csdBannerDismissed", "1");
+    } catch {
+      // Dismissing the local-only banner must not block dashboard usage.
+    }
   }
 
   // Sin suscripción activa: no hay timbres que gastar.
@@ -102,7 +137,6 @@ function Dashboard() {
     !!data &&
     data.csdReady &&
     (!data.hasActiveSubscription || (data.stampBalance !== null && data.stampBalance <= 0));
-
 
   async function onSignOut() {
     await supabase.auth.signOut();
@@ -119,7 +153,9 @@ function Dashboard() {
             {initials}
           </div>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Factio</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Factio
+            </p>
             <h1 className="text-base font-semibold leading-tight">{data?.businessName ?? "..."}</h1>
           </div>
         </div>
@@ -148,7 +184,8 @@ function Dashboard() {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">Completa la configuración de tu CSD</p>
             <p className="mt-0.5 text-xs leading-relaxed text-amber-900/80">
-              Necesitas cargar tu Certificado de Sello Digital para poder timbrar facturas ante el SAT.
+              Necesitas cargar tu Certificado de Sello Digital para poder timbrar facturas ante el
+              SAT.
             </p>
             <button
               type="button"
@@ -174,7 +211,9 @@ function Dashboard() {
           <Zap className="mt-0.5 size-5 shrink-0" strokeWidth={1.8} />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">
-              {data?.hasActiveSubscription ? "Llegaste a tu límite de facturas este mes" : "Necesitas una suscripción para timbrar"}
+              {data?.hasActiveSubscription
+                ? "Llegaste a tu límite de facturas este mes"
+                : "Necesitas una suscripción para timbrar"}
             </p>
             <p className="mt-0.5 text-xs leading-relaxed text-amber-900/80">
               {data?.hasActiveSubscription
@@ -183,7 +222,7 @@ function Dashboard() {
             </p>
             <button
               type="button"
-              onClick={() => navigate({ to: "/perfil" })}
+              onClick={() => navigate({ to: "/profile" })}
               className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-900 px-3 py-1 text-[11px] font-semibold text-amber-50 transition hover:bg-amber-950"
             >
               {data?.hasActiveSubscription ? "Ver planes" : "Elegir un plan"}
@@ -208,20 +247,24 @@ function Dashboard() {
           <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
             <FileText className="size-3.5" /> Facturas hoy
           </div>
-          <p className="mt-1 text-2xl font-bold tracking-tight">{isLoading ? "—" : data?.todayCount}</p>
+          <p className="mt-1 text-2xl font-bold tracking-tight">
+            {isLoading ? "—" : data?.todayCount}
+          </p>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4 shadow-soft">
           <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
             <UsersIcon className="size-3.5" /> Clientes
           </div>
-          <p className="mt-1 text-2xl font-bold tracking-tight">{isLoading ? "—" : data?.clientsCount}</p>
+          <p className="mt-1 text-2xl font-bold tracking-tight">
+            {isLoading ? "—" : data?.clientsCount}
+          </p>
         </div>
       </section>
 
       {limitReached ? (
         <button
           type="button"
-          onClick={() => navigate({ to: "/perfil" })}
+          onClick={() => navigate({ to: "/profile" })}
           className="mt-6 flex w-full animate-reveal items-center justify-center gap-2 rounded-2xl bg-muted py-4 text-sm font-semibold text-muted-foreground shadow-soft transition active:scale-[0.98]"
           style={{ animationDelay: "100ms" }}
         >
@@ -242,43 +285,61 @@ function Dashboard() {
       <section className="mt-10 animate-reveal" style={{ animationDelay: "200ms" }}>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold">Facturas recientes</h2>
-          <Link to="/history" className="text-sm font-semibold text-primary">Ver todas</Link>
+          <Link to="/history" className="text-sm font-semibold text-primary">
+            Ver todas
+          </Link>
         </div>
 
         {isLoading ? (
           <div className="space-y-3">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-16 animate-pulse rounded-2xl border border-border bg-surface" />
+              <div
+                key={i}
+                className="h-16 animate-pulse rounded-2xl border border-border bg-surface"
+              />
             ))}
           </div>
         ) : data && data.recent.length > 0 ? (
           <ul className="divide-y divide-border rounded-3xl border border-border bg-surface">
             {data.recent.map((inv) => (
-              <li key={inv.id} className="flex items-center justify-between gap-3 px-4 py-3.5">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold">{inv.client_snapshot?.legal_name ?? "Cliente"}</p>
-                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-tight text-muted-foreground">
-                    {inv.series}-{String(inv.folio).padStart(6, "0")} · {formatDateMX(inv.created_at)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold">{formatMXN(inv.total)}</p>
-                  <StatusChip status={inv.status} />
-                </div>
+              <li key={inv.id}>
+                <button
+                  type="button"
+                  onClick={() => navigate({ to: "/invoices/$id", params: { id: inv.id } })}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`Ver factura ${inv.series}-${String(inv.folio).padStart(6, "0")}`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">
+                      {inv.client_snapshot?.legal_name ?? "Cliente"}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-tight text-muted-foreground">
+                      {inv.series}-{String(inv.folio).padStart(6, "0")} ·{" "}
+                      {formatDateMX(inv.created_at)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold">{formatMXN(inv.total)}</p>
+                    <StatusChip status={inv.status} />
+                  </div>
+                </button>
               </li>
             ))}
           </ul>
         ) : (
           <div className="rounded-3xl border border-dashed border-border bg-surface px-6 py-12 text-center">
             <p className="font-semibold">Aún no has emitido facturas</p>
-            <p className="mt-1 text-sm text-muted-foreground">Crea tu primera factura en menos de 60 segundos.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Crea tu primera factura en menos de 60 segundos.
+            </p>
             {limitReached ? (
               <button
                 type="button"
-                onClick={() => navigate({ to: "/perfil" })}
+                onClick={() => navigate({ to: "/profile" })}
                 className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-muted px-4 py-2 text-sm font-semibold text-muted-foreground"
               >
-                {data?.hasActiveSubscription ? "Ver planes" : "Elegir un plan"} <ChevronRight className="size-4" />
+                {data?.hasActiveSubscription ? "Ver planes" : "Elegir un plan"}{" "}
+                <ChevronRight className="size-4" />
               </button>
             ) : (
               <Link
@@ -304,7 +365,9 @@ export function StatusChip({ status }: { status: string }) {
   };
   const v = map[status] ?? map.draft;
   return (
-    <span className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${v.cls}`}>
+    <span
+      className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${v.cls}`}
+    >
       <span className="size-1.5 rounded-full bg-current" /> {v.label}
     </span>
   );

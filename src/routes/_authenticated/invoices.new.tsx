@@ -19,7 +19,9 @@ import {
   Save,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
 import { formatMXN } from "@/lib/format";
+import { openInvoiceDocument } from "@/lib/invoice-documents";
 import {
   CFDI_USES,
   PAYMENT_FORMS,
@@ -101,6 +103,7 @@ function NewInvoice() {
     folio: number;
     uuid: string;
     xmlUrl: string;
+    pdfUrl: string;
   } | null>(null);
 
   // Perfil emisor (para reglas de RFC genérico → CP del emisor)
@@ -119,10 +122,7 @@ function NewInvoice() {
   });
 
   const totals = useMemo(() => {
-    const subtotal = items.reduce(
-      (a, i) => a + (i.quantity * i.unit_price - i.discount),
-      0,
-    );
+    const subtotal = items.reduce((a, i) => a + (i.quantity * i.unit_price - i.discount), 0);
     const ivaTotal = items.reduce(
       (a, i) => a + (i.quantity * i.unit_price - i.discount) * i.iva_rate,
       0,
@@ -186,31 +186,14 @@ function NewInvoice() {
         navigate({ to: "/profile" });
         return;
       }
-      if (
-        !company.csd_cer_url ||
-        !company.csd_key_url ||
-        !company.csd_serial_number
-      ) {
-        toast.error(
-          "Configura tu Certificado de Sello Digital (CSD) antes de timbrar.",
-        );
+      if (!company.csd_cer_url || !company.csd_key_url || !company.csd_serial_number) {
+        toast.error("Configura tu Certificado de Sello Digital (CSD) antes de timbrar.");
         return;
       }
       if (company.csd_valid_to && new Date(company.csd_valid_to) < new Date()) {
         toast.error("Tu CSD venció. Sube uno vigente antes de timbrar.");
         return;
       }
-
-      const { data: lastFolio, error: folioError } = await supabase
-        .from("invoices")
-        .select("folio")
-        .eq("user_id", u.user.id)
-        .eq("series", "A")
-        .order("folio", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (folioError) throw folioError;
-      const folio = (lastFolio?.folio ?? 0) + 1;
 
       // Primero se crea el borrador y sus conceptos. La Edge Function será la única
       // responsable de timbrar, marcar como issued y consumir el timbre.
@@ -228,7 +211,8 @@ function NewInvoice() {
             postal_code: receiver.postal_code,
           },
           series: "A",
-          folio,
+          // Assigned atomically by the database trigger.
+          folio: 0,
           status: "draft",
           payment_method: paymentMethod,
           payment_form: paymentForm,
@@ -260,15 +244,9 @@ function NewInvoice() {
         position: idx,
       }));
 
-      const { error: itemsError } = await supabase
-        .from("invoice_items")
-        .insert(itemRows);
+      const { error: itemsError } = await supabase.from("invoice_items").insert(itemRows);
       if (itemsError) {
-        await supabase
-          .from("invoices")
-          .delete()
-          .eq("id", invoice.id)
-          .eq("status", "draft");
+        await supabase.from("invoices").delete().eq("id", invoice.id).eq("status", "draft");
         throw itemsError;
       }
 
@@ -286,34 +264,31 @@ function NewInvoice() {
           console.error("No se pudo actualizar el cliente:", clientUpdateError);
       }
 
-      const { data: stampResult, error: stampFunctionError } =
-        await supabase.functions.invoke("facturama-create-cfdi", {
+      const { data: stampResult, error: stampFunctionError } = await supabase.functions.invoke(
+        "facturama-create-cfdi",
+        {
           body: { invoice_id: invoice.id },
-        });
+        },
+      );
 
       if (stampFunctionError) {
-        console.error(
-          "Error invoking facturama-create-cfdi:",
-          stampFunctionError,
-        );
+        console.error("Error invoking facturama-create-cfdi:", stampFunctionError);
         throw new Error(
-          "No fue posible comunicarse con el servicio de facturación.",
+          await getEdgeFunctionErrorMessage(
+            stampFunctionError,
+            "No fue posible comunicarse con el servicio de facturación.",
+          ),
         );
       }
 
       if (!stampResult?.stamped) {
         console.error("CFDI stamping failed:", stampResult);
-        toast.error(
-          stampResult?.reason ?? "No fue posible timbrar la factura.",
-        );
+        toast.error(stampResult?.reason ?? "No fue posible timbrar la factura.");
         return;
       }
 
       if (stampResult.stamp_consumed === false) {
-        console.error(
-          "CFDI stamped but stamp consumption failed:",
-          stampResult,
-        );
+        console.error("CFDI stamped but stamp consumption failed:", stampResult);
         toast.warning(
           "La factura fue timbrada correctamente, pero el saldo está pendiente de actualización.",
         );
@@ -323,7 +298,7 @@ function NewInvoice() {
 
       const { data: issuedInvoice, error: issuedInvoiceError } = await supabase
         .from("invoices")
-        .select("id, series, folio, uuid_fiscal, xml_url")
+        .select("id, series, folio, uuid_fiscal, xml_url, pdf_url")
         .eq("id", invoice.id)
         .single();
       if (issuedInvoiceError) throw issuedInvoiceError;
@@ -341,13 +316,12 @@ function NewInvoice() {
         folio: issuedInvoice.folio,
         uuid: issuedInvoice.uuid_fiscal ?? "",
         xmlUrl: issuedInvoice.xml_url ?? "",
+        pdfUrl: issuedInvoice.pdf_url ?? "",
       });
       setStep(4);
     } catch (err) {
       console.error("Invoice issue error:", err);
-      toast.error(
-        err instanceof Error ? err.message : "No pudimos emitir la factura",
-      );
+      toast.error(err instanceof Error ? err.message : "No pudimos emitir la factura");
     } finally {
       setIssuing(false);
     }
@@ -358,9 +332,7 @@ function NewInvoice() {
       <header className="flex items-center gap-3">
         <button
           onClick={() =>
-            step > 1 && step < 4
-              ? setStep((step - 1) as Step)
-              : navigate({ to: "/dashboard" })
+            step > 1 && step < 4 ? setStep((step - 1) as Step) : navigate({ to: "/dashboard" })
           }
           className="grid size-10 place-items-center rounded-full border border-border bg-surface"
         >
@@ -398,9 +370,7 @@ function NewInvoice() {
             items={items}
             setItems={setItems}
             onNext={() =>
-              items.length > 0
-                ? setStep(3)
-                : toast.error("Agrega al menos un concepto")
+              items.length > 0 ? setStep(3) : toast.error("Agrega al menos un concepto")
             }
           />
         )}
@@ -505,9 +475,7 @@ function StepClient({ onPick }: { onPick: (c: ClientRow) => void }) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold">{c.legal_name}</p>
-                    <p className="font-mono text-[10px] uppercase text-muted-foreground">
-                      {c.rfc}
-                    </p>
+                    <p className="font-mono text-[10px] uppercase text-muted-foreground">{c.rfc}</p>
                   </div>
                   <ArrowRight className="size-4 text-muted-foreground" />
                 </button>
@@ -588,10 +556,7 @@ function StepItems({
   return (
     <div className="space-y-3">
       {items.map((it, idx) => (
-        <div
-          key={idx}
-          className="rounded-2xl border border-border bg-surface p-4"
-        >
+        <div key={idx} className="rounded-2xl border border-border bg-surface p-4">
           <div className="flex items-start justify-between gap-2">
             <input
               value={it.description}
@@ -613,9 +578,7 @@ function StepItems({
                 step="0.01"
                 min="0"
                 value={it.quantity}
-                onChange={(e) =>
-                  update(idx, { quantity: Number(e.target.value) })
-                }
+                onChange={(e) => update(idx, { quantity: Number(e.target.value) })}
                 className="ff-mini"
               />
             </Mini>
@@ -625,9 +588,7 @@ function StepItems({
                 step="0.01"
                 min="0"
                 value={it.unit_price}
-                onChange={(e) =>
-                  update(idx, { unit_price: Number(e.target.value) })
-                }
+                onChange={(e) => update(idx, { unit_price: Number(e.target.value) })}
                 className="ff-mini"
               />
             </Mini>
@@ -637,9 +598,7 @@ function StepItems({
                 step="0.01"
                 min="0"
                 value={it.discount}
-                onChange={(e) =>
-                  update(idx, { discount: Number(e.target.value) })
-                }
+                onChange={(e) => update(idx, { discount: Number(e.target.value) })}
                 className="ff-mini"
               />
             </Mini>
@@ -674,9 +633,7 @@ function StepItems({
             <Mini label="IVA">
               <select
                 value={it.iva_rate}
-                onChange={(e) =>
-                  update(idx, { iva_rate: Number(e.target.value) })
-                }
+                onChange={(e) => update(idx, { iva_rate: Number(e.target.value) })}
                 className="ff-mini"
               >
                 <option value={0.16}>16%</option>
@@ -707,16 +664,10 @@ function StepItems({
                 className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left hover:bg-accent"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {p.description}
-                  </p>
-                  <p className="font-mono text-[10px] text-muted-foreground">
-                    SAT {p.sat_key}
-                  </p>
+                  <p className="truncate text-sm font-medium">{p.description}</p>
+                  <p className="font-mono text-[10px] text-muted-foreground">SAT {p.sat_key}</p>
                 </div>
-                <span className="shrink-0 text-sm font-bold">
-                  {formatMXN(p.unit_price)}
-                </span>
+                <span className="shrink-0 text-sm font-bold">{formatMXN(p.unit_price)}</span>
               </button>
             ))}
             {(products ?? []).length === 0 && (
@@ -777,9 +728,7 @@ function Mini({
       </span>
       {children}
       {error && (
-        <span className="mt-1 block text-[10px] font-medium text-destructive">
-          {error}
-        </span>
+        <span className="mt-1 block text-[10px] font-medium text-destructive">{error}</span>
       )}
     </label>
   );
@@ -851,10 +800,7 @@ function StepReview(props: StepReviewProps) {
 
   const [editReceiver, setEditReceiver] = useState(false);
   const receiverBlocking = hasErrors(receiverErrors);
-  const allowedUses = useMemo(
-    () => cfdiUsesForRegime(receiver.tax_regime),
-    [receiver.tax_regime],
-  );
+  const allowedUses = useMemo(() => cfdiUsesForRegime(receiver.tax_regime), [receiver.tax_regime]);
   const isEditedFromClient =
     receiver.legal_name !== normalizeFiscalName(client.legal_name) ||
     receiver.tax_regime !== client.tax_regime ||
@@ -871,8 +817,7 @@ function StepReview(props: StepReviewProps) {
     // Si cambia el régimen y el uso ya no aplica, resetea el uso.
     if (k === "tax_regime") {
       const allowed = cfdiUsesForRegime(v as string).map((x) => x.code);
-      if (next.cfdi_use && !allowed.includes(next.cfdi_use))
-        next.cfdi_use = null;
+      if (next.cfdi_use && !allowed.includes(next.cfdi_use)) next.cfdi_use = null;
     }
     setReceiver(next);
   }
@@ -884,9 +829,7 @@ function StepReview(props: StepReviewProps) {
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Emisor
         </p>
-        <p className="mt-1 truncate font-semibold">
-          {issuer?.legal_name ?? "Configura tu perfil"}
-        </p>
+        <p className="mt-1 truncate font-semibold">{issuer?.legal_name ?? "Configura tu perfil"}</p>
         <p className="font-mono text-xs text-muted-foreground">
           {issuer?.rfc ?? "—"} · CP {issuer?.postal_code ?? "—"} · Régimen{" "}
           {issuer?.tax_regime ?? "—"}
@@ -900,12 +843,8 @@ function StepReview(props: StepReviewProps) {
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Receptor
             </p>
-            <p className="mt-1 truncate font-semibold">
-              {receiver.legal_name || "—"}
-            </p>
-            <p className="font-mono text-xs text-muted-foreground">
-              {receiver.rfc}
-            </p>
+            <p className="mt-1 truncate font-semibold">{receiver.legal_name || "—"}</p>
+            <p className="font-mono text-xs text-muted-foreground">{receiver.rfc}</p>
           </div>
           <button
             type="button"
@@ -933,9 +872,7 @@ function StepReview(props: StepReviewProps) {
               <input
                 value={receiver.legal_name}
                 onChange={(e) => upd("legal_name", e.target.value)}
-                onBlur={(e) =>
-                  upd("legal_name", normalizeFiscalName(e.target.value))
-                }
+                onBlur={(e) => upd("legal_name", normalizeFiscalName(e.target.value))}
                 className="ff-mini"
                 placeholder="MI EMPRESA EJEMPLO"
               />
@@ -959,10 +896,7 @@ function StepReview(props: StepReviewProps) {
                 <input
                   value={receiver.postal_code ?? ""}
                   onChange={(e) =>
-                    upd(
-                      "postal_code",
-                      e.target.value.replace(/\D/g, "").slice(0, 5),
-                    )
+                    upd("postal_code", e.target.value.replace(/\D/g, "").slice(0, 5))
                   }
                   inputMode="numeric"
                   maxLength={5}
@@ -971,10 +905,7 @@ function StepReview(props: StepReviewProps) {
                 />
               </Mini>
             </div>
-            <Mini
-              label="Uso CFDI (filtrado por régimen)"
-              error={receiverErrors.cfdi_use}
-            >
+            <Mini label="Uso CFDI (filtrado por régimen)" error={receiverErrors.cfdi_use}>
               <select
                 value={receiver.cfdi_use ?? ""}
                 onChange={(e) => upd("cfdi_use", e.target.value || null)}
@@ -1074,11 +1005,7 @@ function StepReview(props: StepReviewProps) {
           <div className="grid grid-cols-2 gap-2">
             <Mini
               label="Método"
-              error={
-                paymentError && paymentMethod === "PPD"
-                  ? paymentError
-                  : undefined
-              }
+              error={paymentError && paymentMethod === "PPD" ? paymentError : undefined}
             >
               <select
                 value={paymentMethod}
@@ -1094,11 +1021,7 @@ function StepReview(props: StepReviewProps) {
             </Mini>
             <Mini
               label="Forma de pago"
-              error={
-                paymentError && paymentMethod !== "PPD"
-                  ? paymentError
-                  : undefined
-              }
+              error={paymentError && paymentMethod !== "PPD" ? paymentError : undefined}
             >
               <select
                 value={paymentForm}
@@ -1123,14 +1046,9 @@ function StepReview(props: StepReviewProps) {
         </p>
         <ul className="divide-y divide-border">
           {items.map((it, i) => (
-            <li
-              key={i}
-              className="flex items-center justify-between gap-2 py-2 text-sm"
-            >
+            <li key={i} className="flex items-center justify-between gap-2 py-2 text-sm">
               <span className="min-w-0 truncate">
-                <span className="font-mono text-[10px] text-muted-foreground">
-                  x{it.quantity}
-                </span>{" "}
+                <span className="font-mono text-[10px] text-muted-foreground">x{it.quantity}</span>{" "}
                 {it.description || "—"}
               </span>
               <span className="font-bold">
@@ -1186,15 +1104,7 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Row({
-  label,
-  value,
-  bold,
-}: {
-  label: string;
-  value: string;
-  bold?: boolean;
-}) {
+function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
     <div
       className={`flex items-center justify-between ${bold ? "text-base font-bold" : "text-muted-foreground"}`}
@@ -1215,6 +1125,7 @@ function StepSuccess({
     folio: number;
     uuid: string;
     xmlUrl: string;
+    pdfUrl: string;
   };
 }) {
   return (
@@ -1222,9 +1133,7 @@ function StepSuccess({
       <div className="mx-auto grid size-16 place-items-center rounded-full bg-success/10 text-success">
         <FileCheck2 className="size-7" />
       </div>
-      <h2 className="mt-5 text-2xl font-bold tracking-tight">
-        ¡Factura emitida!
-      </h2>
+      <h2 className="mt-5 text-2xl font-bold tracking-tight">¡Factura emitida!</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Folio{" "}
         <span className="font-mono font-semibold text-foreground">
@@ -1236,14 +1145,22 @@ function StepSuccess({
       </p>
 
       <div className="mt-8 grid grid-cols-3 gap-2">
-        <a
-          href={result.xmlUrl}
-          download={`${result.series}-${result.folio}.xml`}
+        <button
+          type="button"
+          onClick={() =>
+            openInvoiceDocument(result.xmlUrl).catch((error) => toast.error(error.message))
+          }
           className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface p-4 text-xs font-semibold"
         >
           <Download className="size-5 text-primary" /> XML
-        </a>
-        <button className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface p-4 text-xs font-semibold">
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            openInvoiceDocument(result.pdfUrl).catch((error) => toast.error(error.message))
+          }
+          className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface p-4 text-xs font-semibold"
+        >
           <Download className="size-5 text-primary" /> PDF
         </button>
         <button className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface p-4 text-xs font-semibold">

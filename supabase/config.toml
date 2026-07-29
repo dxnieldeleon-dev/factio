@@ -5,3 +5,6 @@ verify_jwt = true
 
 [functions.facturama-create-cfdi]
 verify_jwt = true
+
+[functions.facturama-cancel-cfdi]
+verify_jwt = true
