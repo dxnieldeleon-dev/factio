@@ -143,6 +143,18 @@ export function getCfdiUuid(response: FacturamaCfdiResponse): string | null {
     const value = response[key];
     if (typeof value === "string" && value.trim()) return value;
   }
+  // The api-lite create/get response nests the fiscal UUID under
+  // Complement.TaxStamp.Uuid instead of the document root.
+  const complement = (response as Record<string, unknown>).Complement as
+    | Record<string, unknown>
+    | undefined;
+  const taxStamp = complement?.TaxStamp as Record<string, unknown> | undefined;
+  if (taxStamp) {
+    for (const key of ["Uuid", "UUID", "uuid"]) {
+      const value = taxStamp[key];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+  }
   return null;
 }
 
