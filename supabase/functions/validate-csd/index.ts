@@ -1,10 +1,14 @@
 // Edge Function: validate-csd
 // Validates CSD files stored in private Storage and registers them with Facturama.
+//
+// Uses node-forge (pure JS) instead of node:crypto to parse the certificate
+// and decrypt the private key: many real SAT CSDs use legacy PKCS#8
+// encryption algorithms (e.g. RC2-40-CBC, 3DES) that Deno's native crypto
+// backend does not implement, while forge implements the ciphers itself.
 
-import { Buffer } from "node:buffer";
-import { createPrivateKey, createPublicKey, X509Certificate } from "node:crypto";
 import { encodeBase64 } from "jsr:@std/encoding/base64";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import forge from "npm:node-forge@1.3.1";
 import { uploadCsd } from "../_shared/facturama/client.ts";
 import { isFacturamaError } from "../_shared/facturama/errors.ts";
 
@@ -42,51 +46,60 @@ function isStoragePath(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && !value.includes("..");
 }
 
+function uint8ToBinaryString(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return binary;
+}
+
 function validateCsd(
   certificate: Uint8Array,
   privateKey: Uint8Array,
   password: string,
 ): CsdValidation {
-  let cert: X509Certificate;
+  let cert: forge.pki.Certificate;
   try {
-    cert = new X509Certificate(Buffer.from(certificate));
+    const certAsn1 = forge.asn1.fromDer(forge.util.createBuffer(uint8ToBinaryString(certificate)));
+    cert = forge.pki.certificateFromAsn1(certAsn1);
   } catch {
     return { ok: false, field: "cer", error: "El archivo .cer no es un certificado X.509 válido." };
   }
 
-  const validFrom = new Date(cert.validFrom);
-  const validTo = new Date(cert.validTo);
+  const validFrom = cert.validity.notBefore;
+  const validTo = cert.validity.notAfter;
   const now = new Date();
   if (now < validFrom || now > validTo) {
     return { ok: false, field: "cer", error: "El CSD no se encuentra vigente." };
   }
 
-  let key: ReturnType<typeof createPrivateKey>;
+  let privateKeyInfo: forge.asn1.Asn1 | null;
   try {
-    key = createPrivateKey({
-      key: Buffer.from(privateKey),
-      format: "der",
-      type: "pkcs8",
-      passphrase: password,
-    });
-  } catch (cause) {
-    const message = String(cause instanceof Error ? cause.message : cause).toLowerCase();
-    const isPasswordIssue = /decrypt|passphrase|password|wrong tag/i.test(message);
+    const keyAsn1 = forge.asn1.fromDer(forge.util.createBuffer(uint8ToBinaryString(privateKey)));
+    privateKeyInfo = forge.pki.decryptPrivateKeyInfo(keyAsn1, password);
+  } catch {
+    privateKeyInfo = null;
+  }
+  if (!privateKeyInfo) {
     return {
       ok: false,
-      field: isPasswordIssue ? "password" : "key",
-      // Temporary diagnostic: surfaces the raw crypto error text (no key
-      // bytes, no password) directly in the UI so it can be read without
-      // access to function logs.
-      error: isPasswordIssue
-        ? "La contraseña de la llave privada es incorrecta."
-        : `No fue posible leer la llave privada .key. (diagnóstico: ${message})`,
+      field: "password",
+      error: "La contraseña de la llave privada es incorrecta, o el archivo .key no es válido.",
     };
   }
 
-  const certificatePublicKey = cert.publicKey.export({ format: "der", type: "spki" });
-  const privatePublicKey = createPublicKey(key).export({ format: "der", type: "spki" });
-  if (!Buffer.from(certificatePublicKey).equals(Buffer.from(privatePublicKey))) {
+  let key: forge.pki.rsa.PrivateKey;
+  try {
+    key = forge.pki.privateKeyFromAsn1(privateKeyInfo) as forge.pki.rsa.PrivateKey;
+  } catch {
+    return { ok: false, field: "key", error: "No fue posible leer la llave privada .key." };
+  }
+
+  const certPublicKey = cert.publicKey as forge.pki.rsa.PublicKey;
+  if (certPublicKey.n.toString(16) !== key.n.toString(16)) {
     return { ok: false, field: "key", error: "La llave privada no corresponde al certificado." };
   }
 
