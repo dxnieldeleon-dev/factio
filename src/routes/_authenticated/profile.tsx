@@ -1,688 +1,96 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { Building2, ChevronRight, CreditCard, KeyRound, Loader2, LogOut, Settings, ShieldCheck, Zap } from "lucide-react";
 import { toast } from "sonner";
-import {
-  LogOut,
-  Building2,
-  Settings,
-  Loader2,
-  ShieldCheck,
-  Eye,
-  EyeOff,
-  Upload,
-  CheckCircle2,
-  AlertTriangle,
-  CreditCard,
-  Zap,
-} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { TAX_REGIMES } from "@/lib/sat-catalogs";
-import { validateRFC } from "@/lib/format";
+import { isCsdConfigured, loadCompanyProfile } from "@/features/profile/company-profile";
 
-export const Route = createFileRoute("/_authenticated/profile")({
-  component: Profile,
-});
+export const Route = createFileRoute("/_authenticated/profile")({ component: Profile });
 
-// supabase.functions.invoke() lanza un mensaje genérico
-// ("Edge Function returned a non-2xx status code") cuando la función
-// responde con un status distinto de 2xx. El mensaje real que sí
-// devolvimos en el cuerpo JSON hay que leerlo desde error.context.
+interface PlanRow { id: string; key: string; nombre: string; precio_mxn: number; facturas_incluidas: number; features: Record<string, boolean>; }
+interface SubscriptionRow { id: string; plan_id: string; status: string; current_period_end: string | null; }
+
+async function loadProfile() {
+  const baseProfile = await loadCompanyProfile();
+  const [plansRes, subRes, walletRes] = await Promise.all([
+    supabase.from("plans").select("id, key, nombre, precio_mxn, facturas_incluidas, features").eq("is_active", true).order("precio_mxn"),
+    baseProfile.company ? supabase.from("subscriptions").select("id, plan_id, status, current_period_end").eq("company_id", baseProfile.company.id).maybeSingle() : Promise.resolve({ data: null }),
+    baseProfile.company ? supabase.from("stamp_wallets").select("balance").eq("company_id", baseProfile.company.id).maybeSingle() : Promise.resolve({ data: null }),
+  ]);
+  return { ...baseProfile, plans: (plansRes.data as PlanRow[]) ?? [], subscription: subRes.data as SubscriptionRow | null, walletBalance: (walletRes.data as { balance?: number } | null)?.balance ?? null };
+}
+
 async function getFunctionErrorMessage(error: unknown, fallback: string): Promise<string> {
-  const ctx = (error as { context?: Response })?.context;
-  if (ctx && typeof ctx.json === "function") {
-    try {
-      const body = await ctx.json();
-      if (body?.error) return body.error as string;
-    } catch {
-      // el cuerpo no era JSON o ya se consumió; usamos el fallback
-    }
+  const context = (error as { context?: Response })?.context;
+  if (context && typeof context.json === "function") {
+    try { const body = await context.json(); if (body?.error) return body.error as string; } catch { /* fallback */ }
   }
   return error instanceof Error ? error.message : fallback;
 }
 
-interface PlanRow {
-  id: string;
-  key: string;
-  nombre: string;
-  precio_mxn: number;
-  facturas_incluidas: number;
-  features: Record<string, boolean>;
-}
-interface SubscriptionRow {
-  id: string;
-  plan_id: string;
-  status: string;
-  current_period_end: string | null;
-}
-
-async function loadProfile() {
-  const { data: userData } = await supabase.auth.getUser();
-  const { data: company } = await supabase
-    .from("companies")
-    .select("*")
-    .eq("user_id", userData.user!.id)
-    .maybeSingle();
-
-  const [plansRes, subRes, walletRes] = await Promise.all([
-    supabase
-      .from("plans")
-      .select("id, key, nombre, precio_mxn, facturas_incluidas, features")
-      .eq("is_active", true)
-      .order("precio_mxn"),
-    company
-      ? supabase
-          .from("subscriptions")
-          .select("id, plan_id, status, current_period_end")
-          .eq("company_id", company.id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    company
-      ? supabase.from("stamp_wallets").select("balance").eq("company_id", company.id).maybeSingle()
-      : Promise.resolve({ data: null }),
-  ]);
-
-  return {
-    user: userData.user,
-    company,
-    plans: (plansRes.data as PlanRow[]) ?? [],
-    subscription: subRes.data as SubscriptionRow | null,
-    walletBalance: (walletRes.data as { balance?: number } | null)?.balance ?? null,
-  };
-}
-
 function Profile() {
   const navigate = useNavigate();
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["profile"], queryFn: loadProfile });
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<{
-    legal_name: string;
-    trade_name: string;
-    rfc: string;
-    tax_regime: string;
-    postal_code: string;
-    email: string;
-    phone: string;
-  } | null>(null);
-
-  const cerInputRef = useRef<HTMLInputElement>(null);
-  const keyInputRef = useRef<HTMLInputElement>(null);
-  const [cerFile, setCerFile] = useState<File | null>(null);
-  const [keyFile, setKeyFile] = useState<File | null>(null);
-  const [csdPassword, setCsdPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [savingCsd, setSavingCsd] = useState(false);
-  const [csdError, setCsdError] = useState<string | null>(null);
-
   const [showPlans, setShowPlans] = useState(false);
   const [subscribingPlan, setSubscribingPlan] = useState<string | null>(null);
 
-  // Maneja el redirect de vuelta desde Stripe Checkout (?suscripcion=exito|cancelada)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const estado = params.get("suscripcion");
-    if (estado === "exito") {
-      toast.success("¡Suscripción activada! Puede tardar unos segundos en reflejarse.");
-      qc.invalidateQueries({ queryKey: ["profile"] });
-    } else if (estado === "cancelada") {
-      toast.info("Pago cancelado. No se realizó ningún cargo.");
-    }
-    if (estado) {
-      params.delete("suscripcion");
-      const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
-      window.history.replaceState({}, "", next);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const status = params.get("suscripcion");
+    if (status === "exito") { toast.success("¡Suscripción activada! Puede tardar unos segundos en reflejarse."); queryClient.invalidateQueries({ queryKey: ["profile"] }); }
+    if (status === "cancelada") toast.info("Pago cancelado. No se realizó ningún cargo.");
+    if (status) { params.delete("suscripcion"); window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`); }
+  }, [queryClient]);
 
-  const hasCsdConfigured = !!(
-    data?.company?.csd_cer_url &&
-    data?.company?.csd_key_url &&
-    data?.company?.csd_serial_number &&
-    data?.company?.csd_valid_to &&
-    data?.company?.csd_status === "uploaded"
-  );
-  const hasExistingCsd = !!(data?.company?.csd_cer_url && data?.company?.csd_key_url);
-  const hasReplacementCsd = !!(cerFile && keyFile);
-  const canSaveCsd =
-    (hasReplacementCsd || (!cerFile && !keyFile && hasExistingCsd)) && csdPassword.length > 0;
-
-  const activeSub =
-    data?.subscription &&
-    (data.subscription.status === "active" || data.subscription.status === "trialing")
-      ? data.subscription
-      : null;
-  const activePlan = activeSub
-    ? (data?.plans.find((p) => p.id === activeSub.plan_id) ?? null)
-    : null;
-  const used = activePlan ? activePlan.facturas_incluidas - (data?.walletBalance ?? 0) : 0;
-  const usagePct = activePlan
-    ? Math.min(100, Math.max(0, (used / activePlan.facturas_incluidas) * 100))
-    : 0;
-
-  async function onSaveCsd() {
-    if (!data?.user) return;
-    if (!data.company) {
-      toast.error("Primero guarda los datos fiscales del perfil");
-      return;
-    }
-    setSavingCsd(true);
-    setCsdError(null);
-    try {
-      const userId = data.user.id;
-      const companyId = data.company.id;
-      let cerPath: string | undefined;
-      let keyPath: string | undefined;
-      if (hasReplacementCsd) {
-        const stagingId = crypto.randomUUID();
-        cerPath = `${userId}/csd-staging/${stagingId}/cert.cer`;
-        keyPath = `${userId}/csd-staging/${stagingId}/key.key`;
-        const [cerUpload, keyUpload] = await Promise.all([
-          supabase.storage.from("csd-files").upload(cerPath, cerFile!, { upsert: false }),
-          supabase.storage.from("csd-files").upload(keyPath, keyFile!, { upsert: false }),
-        ]);
-        if (cerUpload.error) throw cerUpload.error;
-        if (keyUpload.error) throw keyUpload.error;
-      }
-
-      // La validación real (¿la contraseña abre el .key? ¿el .key corresponde
-      // al .cer?) ocurre en el servidor. La contraseña viaja solo en esta
-      // llamada y nunca se guarda en ningún lado.
-      const { data: result, error: fnError } = await supabase.functions.invoke("validate-csd", {
-        body: {
-          company_id: companyId,
-          password: csdPassword,
-          cer_path: cerPath,
-          key_path: keyPath,
-        },
-      });
-
-      if (fnError) {
-        const message = await getFunctionErrorMessage(fnError, "No pudimos validar tu CSD.");
-        setCsdError(message);
-        toast.error(message);
-        return;
-      }
-      if (!result?.success) {
-        setCsdError(result?.error ?? "No pudimos validar tu CSD.");
-        toast.error(result?.error ?? "No pudimos validar tu CSD.");
-        return;
-      }
-
-      toast.success("CSD validado y guardado correctamente");
-      setCerFile(null);
-      setKeyFile(null);
-      setCsdPassword("");
-      qc.invalidateQueries({ queryKey: ["profile"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "No pudimos guardar el CSD";
-      setCsdError(message);
-      toast.error(message);
-    } finally {
-      setSavingCsd(false);
-    }
-  }
-
-  async function onSubscribe(planKey: string) {
+  async function subscribe(planKey: string) {
     setSubscribingPlan(planKey);
     try {
-      const { data: result, error } = await supabase.functions.invoke("create-checkout-session", {
-        body: { plan_key: planKey },
-      });
-      if (error) {
-        toast.error(await getFunctionErrorMessage(error, "No pudimos iniciar el pago."));
-        return;
-      }
-      if (!result?.success || !result?.url) {
-        toast.error(result?.error ?? "No pudimos iniciar el pago.");
-        return;
-      }
+      const { data: result, error } = await supabase.functions.invoke("create-checkout-session", { body: { plan_key: planKey } });
+      if (error) { toast.error(await getFunctionErrorMessage(error, "No pudimos iniciar el pago.")); return; }
+      if (!result?.success || !result?.url) { toast.error(result?.error ?? "No pudimos iniciar el pago."); return; }
       window.location.href = result.url;
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No pudimos iniciar el pago.");
-    } finally {
-      setSubscribingPlan(null);
-    }
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : "No pudimos iniciar el pago."); }
+    finally { setSubscribingPlan(null); }
   }
 
-  const current = form ?? {
-    legal_name: data?.company?.legal_name ?? "",
-    trade_name: data?.company?.trade_name ?? "",
-    rfc: data?.company?.rfc ?? "",
-    tax_regime: data?.company?.tax_regime ?? "612",
-    postal_code: data?.company?.postal_code ?? "",
-    email: data?.company?.email ?? data?.user?.email ?? "",
-    phone: data?.company?.phone ?? "",
-  };
+  async function signOut() { await supabase.auth.signOut(); navigate({ to: "/auth", replace: true }); }
 
-  function set<K extends keyof typeof current>(k: K, v: string) {
-    setForm((f) => ({ ...(f ?? current), [k]: v }));
-  }
+  if (isLoading || !data) return <div className="grid min-h-dvh place-items-center"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>;
 
-  async function onSave(e: React.FormEvent) {
-    e.preventDefault();
-    const rfcCheck = validateRFC(current.rfc);
-    if (!rfcCheck.valid) {
-      toast.error(rfcCheck.reason!);
-      return;
-    }
-    if (!current.legal_name.trim()) {
-      toast.error("Razón social requerida");
-      return;
-    }
-    setSaving(true);
-    try {
-      const userId = data!.user!.id;
-      const payload = {
-        user_id: userId,
-        legal_name: current.legal_name.trim(),
-        trade_name: current.trade_name.trim() || null,
-        rfc: current.rfc.toUpperCase().trim(),
-        tax_regime: current.tax_regime,
-        postal_code: current.postal_code.trim() || null,
-        email: current.email.trim() || null,
-        phone: current.phone.trim() || null,
-        is_default: true,
-      };
-      const { error } = data?.company
-        ? await supabase.from("companies").update(payload).eq("id", data.company.id)
-        : await supabase.from("companies").insert(payload);
-      if (error) throw error;
-      toast.success("Perfil guardado");
-      qc.invalidateQueries({ queryKey: ["profile"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No pudimos guardar");
-    } finally {
-      setSaving(false);
-    }
-  }
+  const activeSub = data.subscription && (data.subscription.status === "active" || data.subscription.status === "trialing") ? data.subscription : null;
+  const activePlan = activeSub ? data.plans.find((plan) => plan.id === activeSub.plan_id) ?? null : null;
+  const used = activePlan ? activePlan.facturas_incluidas - (data.walletBalance ?? 0) : 0;
+  const usagePct = activePlan ? Math.min(100, Math.max(0, (used / activePlan.facturas_incluidas) * 100)) : 0;
+  const csdConfigured = isCsdConfigured(data.company);
 
-  async function onSignOut() {
-    await supabase.auth.signOut();
-    navigate({ to: "/auth", replace: true });
-  }
+  return <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
+    <header><p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Perfil del negocio</p><h1 className="text-2xl font-bold tracking-tight">{data.company?.trade_name || data.company?.legal_name || "Mi negocio"}</h1><p className="mt-1 text-xs text-muted-foreground">{data.user.email}</p></header>
 
-  if (isLoading) {
-    return (
-      <div className="grid min-h-dvh place-items-center">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+    <section className="mt-6 space-y-2">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Información del negocio</h2>
+      <ProfileLink to="/profile/fiscal" icon={Building2} title="Perfil fiscal" subtitle="Razón social, RFC y régimen fiscal" />
+      <ProfileLink to="/profile/csd" icon={KeyRound} title="Certificado de sello digital" subtitle={csdConfigured ? "CSD configurado" : "Configúralo para poder timbrar"} badge={csdConfigured ? "Listo" : undefined} />
+    </section>
 
-  return (
-    <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
-      <header>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Perfil del negocio
-        </p>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {current.trade_name || current.legal_name || "Mi negocio"}
-        </h1>
-        <p className="mt-1 text-xs text-muted-foreground">{data?.user?.email}</p>
-      </header>
+    <section className="mt-8 space-y-3">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Suscripción</h2>
+      {activePlan && activeSub ? <div className="rounded-2xl border border-border bg-surface p-4">
+        <div className="flex items-center justify-between"><div><p className="font-semibold">{activePlan.nombre}</p><p className="text-xs text-muted-foreground">${activePlan.precio_mxn} MXN/mes</p></div><CreditCard className="size-5 text-primary" /></div>
+        <div className="mt-3"><div className="flex items-center justify-between text-[11px] text-muted-foreground"><span>Llevas {used} de {activePlan.facturas_incluidas} facturas este mes</span><span>{Math.round(usagePct)}%</span></div><div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${usagePct >= 100 ? "bg-destructive" : "bg-primary"}`} style={{ width: `${usagePct}%` }} /></div></div>
+        {activeSub.current_period_end && <p className="mt-3 text-[11px] text-muted-foreground">Se renueva el {new Date(activeSub.current_period_end).toLocaleDateString("es-MX", { day: "numeric", month: "long" })}</p>}
+        {(data.walletBalance ?? 0) <= 0 && <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-800"><Zap className="mt-0.5 size-3.5 shrink-0" />Se te acabaron los timbres de este mes. Sube de plan para seguir facturando.</div>}
+        <button type="button" onClick={() => setShowPlans((visible) => !visible)} className="mt-3 w-full rounded-xl border border-border bg-background py-2.5 text-xs font-semibold text-foreground">{showPlans ? "Ocultar planes" : "Ver otros planes"}</button>
+      </div> : <p className="text-xs text-muted-foreground">Aún no tienes una suscripción activa. Elige un plan para poder timbrar tus facturas.</p>}
+      {(!activePlan || showPlans) && <div className="space-y-2.5">{data.plans.map((plan) => <div key={plan.id} className="rounded-2xl border border-border bg-surface p-4"><div className="flex items-center justify-between"><div><p className="font-semibold">{plan.nombre}</p><p className="text-xs text-muted-foreground">${plan.precio_mxn} MXN/mes · Hasta {plan.facturas_incluidas} facturas</p></div><button type="button" onClick={() => subscribe(plan.key)} disabled={subscribingPlan === plan.key} className="rounded-full bg-foreground px-4 py-2 text-xs font-semibold text-background disabled:opacity-60">{subscribingPlan === plan.key ? <Loader2 className="size-3.5 animate-spin" /> : "Suscribirme"}</button></div></div>)}</div>}
+    </section>
 
-      <form onSubmit={onSave} className="mt-6 space-y-4">
-        <div className="flex items-center gap-2 rounded-2xl bg-primary-soft px-4 py-3 text-xs text-primary">
-          <Building2 className="size-4" />
-          <span>Esta información se usará al emitir cada CFDI.</span>
-        </div>
-
-        <Field label="Razón social">
-          <input
-            value={current.legal_name}
-            onChange={(e) => set("legal_name", e.target.value)}
-            className="ff-input"
-            required
-          />
-        </Field>
-        <Field label="Nombre comercial (opcional)">
-          <input
-            value={current.trade_name}
-            onChange={(e) => set("trade_name", e.target.value)}
-            className="ff-input"
-          />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="RFC">
-            <input
-              value={current.rfc}
-              onChange={(e) => set("rfc", e.target.value.toUpperCase())}
-              className="ff-input font-mono uppercase"
-              maxLength={13}
-              required
-            />
-          </Field>
-          <Field label="Código postal">
-            <input
-              value={current.postal_code}
-              onChange={(e) => set("postal_code", e.target.value)}
-              className="ff-input font-mono"
-              maxLength={5}
-            />
-          </Field>
-        </div>
-        <Field label="Régimen fiscal">
-          <select
-            value={current.tax_regime}
-            onChange={(e) => set("tax_regime", e.target.value)}
-            className="ff-input"
-          >
-            {TAX_REGIMES.map((r) => (
-              <option key={r.code} value={r.code}>
-                {r.code} — {r.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Correo">
-            <input
-              type="email"
-              value={current.email}
-              onChange={(e) => set("email", e.target.value)}
-              className="ff-input"
-            />
-          </Field>
-          <Field label="Teléfono">
-            <input
-              value={current.phone}
-              onChange={(e) => set("phone", e.target.value)}
-              className="ff-input font-mono"
-            />
-          </Field>
-        </div>
-
-        <button
-          type="submit"
-          disabled={saving}
-          className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-60"
-        >
-          {saving ? <Loader2 className="size-4 animate-spin" /> : "Guardar perfil"}
-        </button>
-      </form>
-
-      <section className="mt-8 space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Certificado de Sello Digital (CSD)
-        </h2>
-
-        {hasCsdConfigured ? (
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[11px] font-semibold text-emerald-700">
-            <CheckCircle2 className="size-3.5" /> CSD Configurado
-          </div>
-        ) : (
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-[11px] font-semibold text-amber-800">
-            <AlertTriangle className="size-3.5" /> Sin CSD — No podrás timbrar
-          </div>
-        )}
-
-        <input
-          ref={cerInputRef}
-          type="file"
-          accept=".cer"
-          className="hidden"
-          onChange={(e) => setCerFile(e.target.files?.[0] ?? null)}
-        />
-        <input
-          ref={keyInputRef}
-          type="file"
-          accept=".key"
-          className="hidden"
-          onChange={(e) => setKeyFile(e.target.files?.[0] ?? null)}
-        />
-
-        <Field label="Certificado (.cer)">
-          <button
-            type="button"
-            onClick={() => cerInputRef.current?.click()}
-            className="ff-input flex items-center justify-between gap-2 text-left"
-          >
-            <span className="flex items-center gap-2 truncate text-sm">
-              <Upload className="size-4 text-muted-foreground shrink-0" />
-              <span className="truncate">{cerFile?.name ?? "Seleccionar archivo .cer"}</span>
-            </span>
-            <span className="text-xs text-primary font-semibold">
-              {cerFile ? "Cambiar" : "Subir"}
-            </span>
-          </button>
-          {!cerFile && data?.company?.csd_cer_url && (
-            <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-700">
-              <CheckCircle2 className="size-3" /> Archivo cargado
-            </p>
-          )}
-        </Field>
-
-        <Field label="Llave privada (.key)">
-          <button
-            type="button"
-            onClick={() => keyInputRef.current?.click()}
-            className="ff-input flex items-center justify-between gap-2 text-left"
-          >
-            <span className="flex items-center gap-2 truncate text-sm">
-              <Upload className="size-4 text-muted-foreground shrink-0" />
-              <span className="truncate">{keyFile?.name ?? "Seleccionar archivo .key"}</span>
-            </span>
-            <span className="text-xs text-primary font-semibold">
-              {keyFile ? "Cambiar" : "Subir"}
-            </span>
-          </button>
-          {!keyFile && data?.company?.csd_key_url && (
-            <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-700">
-              <CheckCircle2 className="size-3" /> Archivo cargado
-            </p>
-          )}
-        </Field>
-
-        <Field label="Contraseña del CSD">
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              value={csdPassword}
-              onChange={(e) => setCsdPassword(e.target.value)}
-              placeholder="Contraseña de tu llave privada"
-              className="ff-input pr-10"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((s) => !s)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-              aria-label={showPassword ? "Ocultar" : "Mostrar"}
-            >
-              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
-          </div>
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
-            Esta es la contraseña que elegiste al generar tu CSD en el portal del SAT. Nunca se
-            guarda: solo se usa para validar y se descarta de inmediato.
-          </p>
-        </Field>
-
-        {csdError && (
-          <p className="rounded-xl bg-destructive/10 px-3 py-2.5 text-[12px] text-destructive">
-            {csdError}
-          </p>
-        )}
-
-        <button
-          type="button"
-          onClick={onSaveCsd}
-          disabled={!canSaveCsd || savingCsd}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {savingCsd ? <Loader2 className="size-4 animate-spin" /> : "Guardar CSD"}
-        </button>
-
-        <p className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-[11px] text-amber-800">
-          <ShieldCheck className="size-3.5 mt-0.5 shrink-0" />
-          Tus archivos CSD se almacenan cifrados y solo son accesibles por ti. Nunca se comparten
-          con terceros.
-        </p>
-      </section>
-
-      {/* -------- Suscripción -------- */}
-      <section className="mt-8 space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Suscripción
-        </h2>
-
-        {activePlan && activeSub ? (
-          <div className="rounded-2xl border border-border bg-surface p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-semibold">{activePlan.nombre}</p>
-                <p className="text-xs text-muted-foreground">${activePlan.precio_mxn} MXN/mes</p>
-              </div>
-              <CreditCard className="size-5 text-primary" />
-            </div>
-
-            <div className="mt-3">
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>
-                  Llevas {used} de {activePlan.facturas_incluidas} facturas este mes
-                </span>
-                <span>{Math.round(usagePct)}%</span>
-              </div>
-              <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className={`h-full rounded-full ${usagePct >= 100 ? "bg-destructive" : "bg-primary"}`}
-                  style={{ width: `${usagePct}%` }}
-                />
-              </div>
-            </div>
-
-            {activeSub.current_period_end && (
-              <p className="mt-3 text-[11px] text-muted-foreground">
-                Se renueva el{" "}
-                {new Date(activeSub.current_period_end).toLocaleDateString("es-MX", {
-                  day: "numeric",
-                  month: "long",
-                })}
-              </p>
-            )}
-
-            {(data?.walletBalance ?? 0) <= 0 && (
-              <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-[11px] text-amber-800">
-                <Zap className="size-3.5 mt-0.5 shrink-0" />
-                Se te acabaron los timbres de este mes. Sube de plan para seguir facturando.
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setShowPlans((v) => !v)}
-              className="mt-3 w-full rounded-xl border border-border bg-background py-2.5 text-xs font-semibold text-foreground"
-            >
-              {showPlans ? "Ocultar planes" : "Ver otros planes"}
-            </button>
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Aún no tienes una suscripción activa. Elige un plan para poder timbrar tus facturas.
-          </p>
-        )}
-
-        {(!activePlan || showPlans) && (
-          <div className="space-y-2.5">
-            {(data?.plans ?? []).map((p) => (
-              <div key={p.id} className="rounded-2xl border border-border bg-surface p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold">{p.nombre}</p>
-                    <p className="text-xs text-muted-foreground">
-                      ${p.precio_mxn} MXN/mes · Hasta {p.facturas_incluidas} facturas
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onSubscribe(p.key)}
-                    disabled={subscribingPlan === p.key}
-                    className="rounded-full bg-foreground px-4 py-2 text-xs font-semibold text-background disabled:opacity-60"
-                  >
-                    {subscribingPlan === p.key ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      "Suscribirme"
-                    )}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="mt-8 space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Cuenta
-        </h2>
-        <ProfileLink
-          to="/settings"
-          icon={Settings}
-          title="Configuración"
-          subtitle="Notificaciones, tema, biometría"
-        />
-        <button
-          type="button"
-          onClick={onSignOut}
-          className="flex w-full items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 text-left transition active:scale-[0.99]"
-        >
-          <div className="grid size-10 place-items-center rounded-xl bg-destructive/10 text-destructive">
-            <LogOut className="size-4" />
-          </div>
-          <div className="flex-1">
-            <p className="font-semibold">Cerrar sesión</p>
-            <p className="text-xs text-muted-foreground">Salir de Factio</p>
-          </div>
-        </button>
-      </section>
-
-      <p className="mt-6 flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground">
-        <ShieldCheck className="size-3" /> Tus datos viajan cifrados y solo tú los ves.
-      </p>
-
-      <style>{`.ff-input{width:100%;border-radius:1rem;border:1px solid var(--input);background:var(--surface);padding:0.875rem 1rem;font-size:0.9rem;outline:none}.ff-input:focus{border-color:var(--primary);box-shadow:0 0 0 4px var(--ring)}`}</style>
-    </div>
-  );
+    <section className="mt-8 space-y-2"><h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cuenta</h2><ProfileLink to="/settings" icon={Settings} title="Configuración" subtitle="Notificaciones, tema, biometría" /><button type="button" onClick={signOut} className="flex w-full items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 text-left transition active:scale-[0.99]"><div className="grid size-10 place-items-center rounded-xl bg-destructive/10 text-destructive"><LogOut className="size-4" /></div><div className="flex-1"><p className="font-semibold">Cerrar sesión</p><p className="text-xs text-muted-foreground">Salir de Factio</p></div></button></section>
+    <p className="mt-6 flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground"><ShieldCheck className="size-3" />Tus datos viajan cifrados y solo tú los ves.</p>
+  </div>;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function ProfileLink({
-  to,
-  icon: Icon,
-  title,
-  subtitle,
-}: {
-  to: string;
-  icon: typeof Settings;
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <Link
-      to={to}
-      className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 transition active:scale-[0.99]"
-    >
-      <div className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary">
-        <Icon className="size-4" />
-      </div>
-      <div className="flex-1">
-        <p className="font-semibold">{title}</p>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
-      </div>
-    </Link>
-  );
+function ProfileLink({ to, icon: Icon, title, subtitle, badge }: { to: "/profile/fiscal" | "/profile/csd" | "/settings"; icon: typeof Settings; title: string; subtitle: string; badge?: string }) {
+  return <Link to={to} className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 transition active:scale-[0.99]"><div className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary"><Icon className="size-4" /></div><div className="flex-1"><div className="flex items-center gap-2"><p className="font-semibold">{title}</p>{badge && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-700">{badge}</span>}</div><p className="text-xs text-muted-foreground">{subtitle}</p></div><ChevronRight className="size-4 text-muted-foreground/70" /></Link>;
 }

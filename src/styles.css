@@ -162,6 +162,19 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  /*
+   * Safari on iOS amplía la vista al enfocar controles con texto menor a 16px.
+   * En dispositivos táctiles mantenemos ese mínimo sin cambiar la tipografía
+   * de escritorio ni bloquear el zoom manual de accesibilidad.
+   */
+  @media (hover: none) and (pointer: coarse) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
 }
 
 @keyframes ff-slide-up {
@@ -187,4 +200,19 @@
   min-height: 100dvh;
   background-color: var(--color-background);
   position: relative;
+}
+
+@utility ff-input {
+  width: 100%;
+  border: 1px solid var(--input);
+  border-radius: 1rem;
+  background: var(--surface);
+  padding: 0.875rem 1rem;
+  font-size: 0.9rem;
+  outline: none;
+
+  &:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px var(--ring);
+  }
 }
