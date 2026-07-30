@@ -76,7 +76,7 @@ BEGIN
   RETURNING balance INTO v_balance;
 
   INSERT INTO public.stamp_transactions (company_id, type, amount, reference_id)
-  VALUES (v_company_id, 'consumption', -1, p_invoice_id);
+  VALUES (v_company_id, 'consumo', -1, p_invoice_id);
 
   RETURN QUERY SELECT v_balance;
 END;
