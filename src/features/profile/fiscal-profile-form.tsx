@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,12 +16,16 @@ type FiscalForm = {
   postal_code: string;
   email: string;
   phone: string;
+  activity_profile_id: string;
 };
+
+type ActivityProfileOption = { id: string; name: string; description: string | null };
 
 export function FiscalProfileForm({ profile }: { profile: CompanyProfileData }) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FiscalForm | null>(null);
+  const [activityProfiles, setActivityProfiles] = useState<ActivityProfileOption[]>([]);
   const current = form ?? {
     legal_name: profile.company?.legal_name ?? "",
     trade_name: profile.company?.trade_name ?? "",
@@ -30,7 +34,18 @@ export function FiscalProfileForm({ profile }: { profile: CompanyProfileData }) 
     postal_code: profile.company?.postal_code ?? "",
     email: profile.company?.email ?? profile.user.email ?? "",
     phone: profile.company?.phone ?? "",
+    activity_profile_id: profile.company?.activity_profile_id ?? "",
   };
+
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from("activity_profiles")
+        .select("id, name, description")
+        .order("sort_order");
+      if (!error) setActivityProfiles(data ?? []);
+    })();
+  }, []);
 
   function set<K extends keyof FiscalForm>(key: K, value: FiscalForm[K]) {
     setForm((previous) => ({ ...(previous ?? current), [key]: value }));
@@ -75,6 +90,7 @@ export function FiscalProfileForm({ profile }: { profile: CompanyProfileData }) 
         postal_code: current.postal_code.trim() || null,
         email: current.email.trim() || null,
         phone: current.phone.trim() || null,
+        activity_profile_id: current.activity_profile_id || null,
         is_default: true,
       };
       const { error } = profile.company
@@ -128,6 +144,22 @@ export function FiscalProfileForm({ profile }: { profile: CompanyProfileData }) 
         <Field label="Correo"><input type="email" value={current.email} onChange={(e) => set("email", e.target.value)} className="ff-input" /></Field>
         <Field label="Teléfono"><input value={current.phone} onChange={(e) => set("phone", e.target.value)} className="ff-input font-mono" /></Field>
       </div>
+      <Field label="Actividad económica (opcional)">
+        <select
+          value={current.activity_profile_id}
+          onChange={(e) => set("activity_profile_id", e.target.value)}
+          className="ff-input"
+        >
+          <option value="">Sin asignar</option>
+          {activityProfiles.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          Selecciona a qué te dedicas para que, al agregar un servicio, te sugiramos la clave y
+          unidad SAT correctas automáticamente.
+        </p>
+      </Field>
       <button disabled={saving} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-60">
         {saving ? <Loader2 className="size-4 animate-spin" /> : "Guardar perfil fiscal"}
       </button>
