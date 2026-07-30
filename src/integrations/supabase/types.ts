@@ -8,6 +8,112 @@ export type Database = {
   };
   public: {
     Tables: {
+      activity_profiles: {
+        Row: {
+          created_at: string;
+          description: string | null;
+          id: string;
+          is_active: boolean;
+          key: string;
+          name: string;
+          sort_order: number;
+        };
+        Insert: {
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          is_active?: boolean;
+          key: string;
+          name: string;
+          sort_order?: number;
+        };
+        Update: {
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          is_active?: boolean;
+          key?: string;
+          name?: string;
+          sort_order?: number;
+        };
+        Relationships: [];
+      };
+      activity_profile_service_types: {
+        Row: {
+          activity_profile_id: string;
+          created_at: string;
+          default_unit_price: number | null;
+          id: string;
+          is_active: boolean;
+          name: string;
+          sat_key: string;
+          sat_unit: string;
+          sort_order: number;
+        };
+        Insert: {
+          activity_profile_id: string;
+          created_at?: string;
+          default_unit_price?: number | null;
+          id?: string;
+          is_active?: boolean;
+          name: string;
+          sat_key: string;
+          sat_unit: string;
+          sort_order?: number;
+        };
+        Update: {
+          activity_profile_id?: string;
+          created_at?: string;
+          default_unit_price?: number | null;
+          id?: string;
+          is_active?: boolean;
+          name?: string;
+          sat_key?: string;
+          sat_unit?: string;
+          sort_order?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "activity_profile_service_types_activity_profile_id_fkey";
+            columns: ["activity_profile_id"];
+            isOneToOne: false;
+            referencedRelation: "activity_profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      sat_economic_activities: {
+        Row: {
+          activity_profile_id: string | null;
+          created_at: string;
+          description: string;
+          id: string;
+          scian_code: string | null;
+        };
+        Insert: {
+          activity_profile_id?: string | null;
+          created_at?: string;
+          description: string;
+          id?: string;
+          scian_code?: string | null;
+        };
+        Update: {
+          activity_profile_id?: string | null;
+          created_at?: string;
+          description?: string;
+          id?: string;
+          scian_code?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "sat_economic_activities_activity_profile_id_fkey";
+            columns: ["activity_profile_id"];
+            isOneToOne: false;
+            referencedRelation: "activity_profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       activity_logs: {
         Row: {
           action: string;
@@ -99,6 +205,7 @@ export type Database = {
       };
       companies: {
         Row: {
+          activity_profile_id: string | null;
           address: string | null;
           branch: string | null;
           city: string | null;
@@ -128,6 +235,7 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          activity_profile_id?: string | null;
           address?: string | null;
           branch?: string | null;
           city?: string | null;
@@ -157,6 +265,7 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          activity_profile_id?: string | null;
           address?: string | null;
           branch?: string | null;
           city?: string | null;
@@ -185,7 +294,15 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "companies_activity_profile_id_fkey";
+            columns: ["activity_profile_id"];
+            isOneToOne: false;
+            referencedRelation: "activity_profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       invoice_items: {
         Row: {
