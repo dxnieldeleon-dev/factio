@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
 import { formatMXN, formatDateMX } from "@/lib/format";
-import { openInvoiceDocument } from "@/lib/invoice-documents";
+import { openInvoiceDocument, shareInvoiceOnWhatsApp } from "@/lib/invoice-documents";
 import { StatusChip } from "./dashboard";
 import {
   AlertDialog,
@@ -35,7 +35,7 @@ async function loadInvoice(id: string) {
     supabase
       .from("invoices")
       .select(
-        "id, series, folio, total, subtotal, iva_total, status, created_at, issued_at, uuid_fiscal, client_snapshot, xml_url, pdf_url, payment_method, payment_form, cfdi_use, currency, cancellation_reason, cancellation_status, cancellation_requested_at, cancellation_replacement_uuid, cancelled_at",
+        "id, series, folio, total, subtotal, iva_total, status, created_at, issued_at, uuid_fiscal, client_snapshot, xml_url, pdf_url, payment_method, payment_form, cfdi_use, currency, cancellation_reason, cancellation_status, cancellation_requested_at, cancellation_replacement_uuid, cancelled_at, client_id, clients(phone)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -66,10 +66,27 @@ function InvoiceDetail() {
   const [reason, setReason] = useState(CANCEL_REASONS[0].code);
   const [replacementUuid, setReplacementUuid] = useState("");
   const [cancelling, setCancelling] = useState(false);
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
 
   const folioFmt = data
     ? `${data.invoice.series}-${String(data.invoice.folio).padStart(6, "0")}`
     : "";
+
+  async function sendWhatsApp() {
+    if (!data?.invoice.pdf_url) return;
+    setSendingWhatsApp(true);
+    try {
+      await shareInvoiceOnWhatsApp(
+        data.invoice.pdf_url,
+        `Factura ${folioFmt} por ${formatMXN(data.invoice.total)}`,
+        data.invoice.clients?.phone,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No pudimos preparar el envío");
+    } finally {
+      setSendingWhatsApp(false);
+    }
+  }
 
   async function copyUuid() {
     if (!data?.invoice.uuid_fiscal) return;
@@ -306,17 +323,20 @@ function InvoiceDetail() {
                 <Download className="size-3.5" /> PDF
               </button>
             )}
-            {(inv.pdf_url || inv.xml_url) && (
-              <a
-                href={`https://wa.me/?text=${encodeURIComponent(
-                  `Factura ${folioFmt} por ${formatMXN(inv.total)}${inv.pdf_url ? `\n${inv.pdf_url}` : ""}`,
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full bg-[#25D366] px-3 py-1.5 text-xs font-semibold text-white"
+            {inv.pdf_url && (
+              <button
+                type="button"
+                onClick={sendWhatsApp}
+                disabled={sendingWhatsApp}
+                className="inline-flex items-center gap-1.5 rounded-full bg-[#25D366] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
               >
-                <Share2 className="size-3.5" /> WhatsApp
-              </a>
+                {sendingWhatsApp ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Share2 className="size-3.5" />
+                )}{" "}
+                WhatsApp
+              </button>
             )}
             <button
               onClick={() => setConfirmOpen(true)}

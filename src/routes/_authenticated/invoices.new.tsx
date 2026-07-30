@@ -21,7 +21,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
 import { formatMXN } from "@/lib/format";
-import { openInvoiceDocument } from "@/lib/invoice-documents";
+import { openInvoiceDocument, shareInvoiceOnWhatsApp } from "@/lib/invoice-documents";
 import {
   CFDI_USES,
   PAYMENT_FORMS,
@@ -55,6 +55,7 @@ interface ClientRow {
   postal_code: string | null;
   cfdi_use: string | null;
   email: string | null;
+  phone: string | null;
 }
 interface ProductRow {
   id: string;
@@ -201,7 +202,7 @@ function NewInvoice() {
       if (resumeClientId) {
         const { data } = await supabase
           .from("clients")
-          .select("id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email")
+          .select("id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email, phone")
           .eq("id", resumeClientId)
           .maybeSingle();
         if (data) {
@@ -504,7 +505,9 @@ function NewInvoice() {
             issuing={issuing}
           />
         )}
-        {step === 4 && result && <StepSuccess result={result} />}
+        {step === 4 && result && (
+          <StepSuccess result={result} total={totals.total} clientPhone={client?.phone ?? null} />
+        )}
       </div>
     </div>
   );
@@ -518,7 +521,7 @@ function StepClient({ onPick }: { onPick: (c: ClientRow) => void }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email")
+        .select("id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email, phone")
         .order("is_favorite", { ascending: false })
         .order("legal_name");
       if (error) throw error;
@@ -1228,6 +1231,8 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
 /* -------- Step 4: Success -------- */
 function StepSuccess({
   result,
+  total,
+  clientPhone,
 }: {
   result: {
     id: string;
@@ -1237,7 +1242,27 @@ function StepSuccess({
     xmlUrl: string;
     pdfUrl: string;
   };
+  total: number;
+  clientPhone: string | null;
 }) {
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+  const folioFmt = `${result.series}-${String(result.folio).padStart(6, "0")}`;
+
+  async function sendWhatsApp() {
+    setSendingWhatsApp(true);
+    try {
+      await shareInvoiceOnWhatsApp(
+        result.pdfUrl,
+        `Factura ${folioFmt} por ${formatMXN(total)}`,
+        clientPhone,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No pudimos preparar el envío");
+    } finally {
+      setSendingWhatsApp(false);
+    }
+  }
+
   return (
     <div className="py-6 text-center">
       <div className="mx-auto grid size-16 place-items-center rounded-full bg-success/10 text-success">
@@ -1273,8 +1298,18 @@ function StepSuccess({
         >
           <Download className="size-5 text-primary" /> PDF
         </button>
-        <button className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface p-4 text-xs font-semibold">
-          <Share2 className="size-5 text-primary" /> Enviar
+        <button
+          type="button"
+          onClick={sendWhatsApp}
+          disabled={sendingWhatsApp}
+          className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface p-4 text-xs font-semibold disabled:opacity-60"
+        >
+          {sendingWhatsApp ? (
+            <Loader2 className="size-5 animate-spin text-primary" />
+          ) : (
+            <Share2 className="size-5 text-primary" />
+          )}
+          Enviar
         </button>
       </div>
 
