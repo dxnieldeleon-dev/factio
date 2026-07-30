@@ -2,7 +2,7 @@
 // Cancels an issued Multi-Issuer CFDI at Facturama before changing local state.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { cancelCfdi } from "../_shared/facturama/client.ts";
+import { cancelCfdi, getCfdi } from "../_shared/facturama/client.ts";
 import { isFacturamaError } from "../_shared/facturama/errors.ts";
 
 const cors = {
@@ -128,6 +128,50 @@ Deno.serve(async (req) => {
       facturama_response: cancellation,
     });
   } catch (error) {
+    // Ambiguous outcome: the cancel request may have been applied at
+    // Facturama's end even though the response we got back was an error
+    // (network hiccup, sandbox flakiness, timeout after they'd already
+    // processed it). Check the CFDI's real status before reporting failure
+    // and leaving cancellation_status stuck at NULL forever.
+    try {
+      const current = await getCfdi(facturamaId);
+      if (isCancelled((current as Record<string, unknown>).Status)) {
+        const { error: reconcileError } = await supabase.rpc("finalize_cfdi_cancellation", {
+          p_invoice_id: invoice.id,
+          p_motive: payload.motive,
+          p_uuid_replacement:
+            typeof payload.uuid_replacement === "string" ? payload.uuid_replacement : null,
+          p_cancelled: true,
+          p_request_date: null,
+          p_cancelled_at: new Date().toISOString(),
+          p_pac_response: current,
+        });
+        if (!reconcileError) {
+          return json({
+            ok: true,
+            cancelled: true,
+            pending_acceptance: false,
+            message: "El CFDI ya estaba cancelado ante el PAC; se sincronizó el estado.",
+            facturama_response: current,
+          });
+        }
+      }
+    } catch {
+      // Couldn't verify either — fall through and report the original error.
+    }
+
+    const errorPacResponse = isFacturamaError(error)
+      ? error.pacResponse
+      : { message: error instanceof Error ? error.message : String(error) };
+    try {
+      await supabase.rpc("mark_cfdi_cancellation_error", {
+        p_invoice_id: invoice.id,
+        p_pac_response: errorPacResponse,
+      });
+    } catch {
+      // Best-effort bookkeeping; never mask the original error below.
+    }
+
     if (isFacturamaError(error)) {
       return json(
         {
