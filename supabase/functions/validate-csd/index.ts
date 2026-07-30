@@ -71,6 +71,8 @@ function validateCsd(
     });
   } catch (cause) {
     const message = String(cause instanceof Error ? cause.message : cause).toLowerCase();
+    // Temporary diagnostic: only the error text (no key bytes, no password).
+    console.error("CSD key parse failed:", message);
     return {
       ok: false,
       field: /decrypt|passphrase|password|wrong tag/i.test(message) ? "password" : "key",
