@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ArrowRight, Loader2, Upload, CheckCircle2, Lock, Image as ImageIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { TAX_REGIMES } from "@/lib/sat-catalogs";
-import { normalizeFiscalName, validateRfcStrict } from "@/lib/fiscal";
+import { taxRegimesForPersonType, type PersonType } from "@/lib/sat-catalogs";
+import { classifyRfc, normalizeFiscalName, validateRfcStrict } from "@/lib/fiscal";
+import factioLogoInverted from "@/assets/factio-logo-inverted.png.asset.json";
 
 export const Route = createFileRoute("/onboarding")({
   ssr: false,
@@ -88,6 +89,23 @@ function OnboardingPage() {
     [rfc, legalName, taxRegime, postalCode],
   );
 
+  // Detecta persona física (RFC de 13) o moral (RFC de 12) para filtrar el
+  // régimen fiscal a solo las opciones que el SAT permite para cada una.
+  const personType: PersonType | null = useMemo(() => {
+    const kind = classifyRfc(rfc);
+    if (kind === "physical") return "fisica";
+    if (kind === "moral") return "moral";
+    return null;
+  }, [rfc]);
+  const availableRegimes = useMemo(() => taxRegimesForPersonType(personType), [personType]);
+
+  useEffect(() => {
+    if (taxRegime && !availableRegimes.some((r) => r.code === taxRegime)) {
+      setTaxRegime("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableRegimes]);
+
   function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -166,9 +184,7 @@ function OnboardingPage() {
       <div className="mx-auto w-full max-w-2xl">
         <header className="mb-8 text-[#C2E8FF]">
           <div className="flex items-center gap-2">
-            <div className="grid size-9 place-items-center rounded-xl bg-[#C2E8FF] font-bold text-[#011025]">
-              F
-            </div>
+            <img src={factioLogoInverted.url} alt="Factio" className="size-9 rounded-xl" />
             <span className="font-semibold tracking-tight">Factio</span>
           </div>
           <h1 className="mt-6 text-3xl font-bold tracking-tight text-white">
@@ -264,12 +280,17 @@ function OnboardingPage() {
                     className={inputCls(attempted && !!errors.tax_regime)}
                   >
                     <option value="">Selecciona tu régimen…</option>
-                    {TAX_REGIMES.map((r) => (
+                    {availableRegimes.map((r) => (
                       <option key={r.code} value={r.code}>
                         {r.code} — {r.name}
                       </option>
                     ))}
                   </select>
+                  {personType && (
+                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                      Detectado por tu RFC: <strong>{personType === "fisica" ? "Persona Física" : "Persona Moral"}</strong> — solo se muestran los regímenes aplicables.
+                    </p>
+                  )}
                 </Field>
               </div>
             </div>
@@ -606,11 +627,11 @@ function CsdFileField({
         {label} <span className="text-destructive">*</span>
       </span>
       <div
-        className={`flex items-center gap-3 rounded-xl border bg-background px-3 py-2.5 text-sm transition ${
+        className={`flex items-center gap-3 overflow-hidden rounded-xl border bg-background px-3 py-2.5 text-sm transition ${
           error ? "border-destructive" : "border-input"
         }`}
       >
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-3 py-1.5 text-xs font-semibold hover:bg-accent">
+        <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-3 py-1.5 text-xs font-semibold hover:bg-accent">
           <Upload className="size-4" />
           {file ? "Cambiar" : "Elegir archivo"}
           <input type="file" accept={accept} className="hidden" onChange={onChange} />

@@ -109,7 +109,7 @@ function Status({ configured }: { configured: boolean }) {
 }
 
 function FileField({ label, file, existing, onClick }: { label: string; file: File | null; existing: boolean; onClick: () => void }) {
-  return <Field label={label}><button type="button" onClick={onClick} className="ff-input flex items-center justify-between gap-2 text-left"><span className="flex items-center gap-2 truncate text-sm"><Upload className="size-4 shrink-0 text-muted-foreground" /><span className="truncate">{file?.name ?? `Seleccionar archivo ${label.match(/\(.+\)/)?.[0] ?? ""}`}</span></span><span className="text-xs font-semibold text-primary">{file ? "Cambiar" : "Subir"}</span></button>{!file && existing && <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-700"><CheckCircle2 className="size-3" />Archivo cargado</p>}</Field>;
+  return <Field label={label}><button type="button" onClick={onClick} className="ff-input flex items-center gap-2 text-left"><span className="flex min-w-0 flex-1 items-center gap-2 text-sm"><Upload className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{file?.name ?? `Seleccionar archivo ${label.match(/\(.+\)/)?.[0] ?? ""}`}</span></span><span className="shrink-0 text-xs font-semibold text-primary">{file ? "Cambiar" : "Subir"}</span></button>{!file && existing && <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-700"><CheckCircle2 className="size-3" />Archivo cargado</p>}</Field>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

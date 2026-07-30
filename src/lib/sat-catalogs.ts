@@ -175,6 +175,39 @@ export const CFDI_USE_BY_REGIME: Record<string, string[]> = {
           "D01", "D02", "D03", "D04", "D05", "D06", "D07", "D08", "D09", "D10"],
 };
 
+/**
+ * Aplicabilidad de cada régimen fiscal por tipo de persona, según el
+ * catálogo c_RegimenFiscal del SAT (Anexo 20, CFDI 4.0).
+ */
+export type PersonType = "fisica" | "moral";
+
+export const TAX_REGIME_PERSON_TYPE: Record<string, PersonType[]> = {
+  "601": ["moral"],
+  "603": ["moral"],
+  "605": ["fisica"],
+  "606": ["fisica"],
+  "607": ["fisica"],
+  "608": ["fisica"],
+  "610": ["fisica", "moral"],
+  "611": ["fisica"],
+  "612": ["fisica"],
+  "614": ["fisica"],
+  "615": ["fisica"],
+  "616": ["fisica"],
+  "620": ["moral"],
+  "621": ["fisica"],
+  "622": ["moral"],
+  "623": ["moral"],
+  "624": ["moral"],
+  "625": ["fisica"],
+  "626": ["fisica", "moral"],
+};
+
+export function taxRegimesForPersonType(personType: PersonType | null | undefined): SatItem[] {
+  if (!personType) return TAX_REGIMES;
+  return TAX_REGIMES.filter((r) => TAX_REGIME_PERSON_TYPE[r.code]?.includes(personType));
+}
+
 export function cfdiUsesForRegime(regime: string | null | undefined): SatItem[] {
   if (!regime) return CFDI_USES;
   const allowed = CFDI_USE_BY_REGIME[regime];
