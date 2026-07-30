@@ -144,7 +144,13 @@ function Terminos() {
             <h2>13. Contacto</h2>
             <p>
               Dudas sobre estos Términos:{" "}
-              <span className="font-medium text-foreground">[correo de contacto pendiente]</span>.
+              <a
+                href="mailto:daniel.eusebio@factio.mx"
+                className="font-medium text-primary hover:underline"
+              >
+                daniel.eusebio@factio.mx
+              </a>
+              .
             </p>
           </section>
         </div>

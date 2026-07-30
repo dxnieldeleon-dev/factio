@@ -37,11 +37,8 @@ function Privacidad() {
           <section>
             <h2>1. Responsable del tratamiento</h2>
             <p>
-              <span className="font-medium text-foreground">
-                [Razón social / nombre comercial pendiente de completar]
-              </span>
-              , con domicilio en{" "}
-              <span className="font-medium text-foreground">[domicilio pendiente]</span>, es
+              <span className="font-medium text-foreground">Factio</span>, con domicilio en{" "}
+              <span className="font-medium text-foreground">Pedro María Anaya 2532C</span>, es
               responsable del tratamiento de tus datos personales.
             </p>
           </section>
@@ -119,8 +116,13 @@ function Privacidad() {
               Tienes derecho a Acceder, Rectificar y Cancelar tus datos personales, así como a
               Oponerte a su tratamiento (derechos ARCO), y a revocar tu consentimiento en cualquier
               momento. Para ejercerlos, escríbenos a{" "}
-              <span className="font-medium text-foreground">[correo de contacto pendiente]</span>.
-              Responderemos dentro de los plazos que marca la ley.
+              <a
+                href="mailto:daniel.eusebio@factio.mx"
+                className="font-medium text-primary hover:underline"
+              >
+                daniel.eusebio@factio.mx
+              </a>
+              . Responderemos dentro de los plazos que marca la ley.
             </p>
           </section>
 
@@ -153,7 +155,13 @@ function Privacidad() {
             <h2>9. Contacto</h2>
             <p>
               Dudas sobre este Aviso:{" "}
-              <span className="font-medium text-foreground">[correo de contacto pendiente]</span>.
+              <a
+                href="mailto:daniel.eusebio@factio.mx"
+                className="font-medium text-primary hover:underline"
+              >
+                daniel.eusebio@factio.mx
+              </a>
+              .
             </p>
           </section>
         </div>
