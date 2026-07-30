@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { TAX_REGIMES } from "@/lib/sat-catalogs";
+import { taxRegimesForPersonType, type PersonType } from "@/lib/sat-catalogs";
 import { validateRFC } from "@/lib/format";
+import { classifyRfc } from "@/lib/fiscal";
 import type { CompanyProfileData } from "./company-profile";
 
 type FiscalForm = {
@@ -35,11 +36,33 @@ export function FiscalProfileForm({ profile }: { profile: CompanyProfileData }) 
     setForm((previous) => ({ ...(previous ?? current), [key]: value }));
   }
 
+  // Detecta persona física (RFC de 13) o moral (RFC de 12) para filtrar el
+  // régimen fiscal a solo las opciones que el SAT permite para cada una.
+  const personType: PersonType | null = useMemo(() => {
+    const kind = classifyRfc(current.rfc);
+    if (kind === "physical") return "fisica";
+    if (kind === "moral") return "moral";
+    return null;
+  }, [current.rfc]);
+  const availableRegimes = useMemo(() => taxRegimesForPersonType(personType), [personType]);
+
+  function setRfc(value: string) {
+    const upper = value.toUpperCase();
+    const nextKind = classifyRfc(upper);
+    const nextPersonType = nextKind === "physical" ? "fisica" : nextKind === "moral" ? "moral" : null;
+    const regimesForNext = taxRegimesForPersonType(nextPersonType);
+    const nextTaxRegime = regimesForNext.some((r) => r.code === current.tax_regime)
+      ? current.tax_regime
+      : "";
+    setForm((previous) => ({ ...(previous ?? current), rfc: upper, tax_regime: nextTaxRegime }));
+  }
+
   async function save(event: React.FormEvent) {
     event.preventDefault();
     const rfcCheck = validateRFC(current.rfc);
     if (!rfcCheck.valid) return toast.error(rfcCheck.reason!);
     if (!current.legal_name.trim()) return toast.error("Razón social requerida");
+    if (!current.tax_regime) return toast.error("Selecciona tu régimen fiscal");
 
     setSaving(true);
     try {
@@ -84,7 +107,7 @@ export function FiscalProfileForm({ profile }: { profile: CompanyProfileData }) 
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="RFC">
-          <input value={current.rfc} onChange={(e) => set("rfc", e.target.value.toUpperCase())} className="ff-input font-mono uppercase" maxLength={13} required />
+          <input value={current.rfc} onChange={(e) => setRfc(e.target.value)} className="ff-input font-mono uppercase" maxLength={13} required />
         </Field>
         <Field label="Código postal">
           <input value={current.postal_code} onChange={(e) => set("postal_code", e.target.value)} className="ff-input font-mono" maxLength={5} />
@@ -92,8 +115,14 @@ export function FiscalProfileForm({ profile }: { profile: CompanyProfileData }) 
       </div>
       <Field label="Régimen fiscal">
         <select value={current.tax_regime} onChange={(e) => set("tax_regime", e.target.value)} className="ff-input">
-          {TAX_REGIMES.map((regime) => <option key={regime.code} value={regime.code}>{regime.code} — {regime.name}</option>)}
+          <option value="">Selecciona tu régimen…</option>
+          {availableRegimes.map((regime) => <option key={regime.code} value={regime.code}>{regime.code} — {regime.name}</option>)}
         </select>
+        {personType && (
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            Detectado por tu RFC: <strong>{personType === "fisica" ? "Persona Física" : "Persona Moral"}</strong> — solo se muestran los regímenes aplicables.
+          </p>
+        )}
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Correo"><input type="email" value={current.email} onChange={(e) => set("email", e.target.value)} className="ff-input" /></Field>
