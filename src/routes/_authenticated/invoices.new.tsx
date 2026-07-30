@@ -77,6 +77,44 @@ interface LineItem {
 
 type Step = 1 | 2 | 3 | 4;
 
+// Persists in-progress wizard state across the full-page navigation to
+// /clients/new or /products/new, so creating one mid-flow doesn't force
+// restarting the invoice from scratch.
+const DRAFT_KEY = "factio.invoiceDraft.v1";
+
+type InvoiceDraft = {
+  client: ClientRow;
+  receiver: ReceiverProfile;
+  saveReceiverEdits: boolean;
+  items: LineItem[];
+};
+
+function saveInvoiceDraft(draft: InvoiceDraft) {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // sessionStorage unavailable (e.g. private mode): worst case the
+    // wizard restarts, same as before this feature existed.
+  }
+}
+
+function loadInvoiceDraft(): InvoiceDraft | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as InvoiceDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearInvoiceDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 function NewInvoice() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -148,6 +186,69 @@ function NewInvoice() {
     });
     setSaveReceiverEdits(false);
     setStep(2);
+  }
+
+  // Resumes the wizard after creating a client or product mid-flow: those
+  // pages do a full navigation away, so this restores whatever was saved
+  // to sessionStorage and picks up the newly created row.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const resumeClientId = params.get("resume_client");
+    const resumeProductId = params.get("resume_product");
+    if (!resumeClientId && !resumeProductId) return;
+
+    (async () => {
+      if (resumeClientId) {
+        const { data } = await supabase
+          .from("clients")
+          .select("id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email")
+          .eq("id", resumeClientId)
+          .maybeSingle();
+        if (data) {
+          pickClient(data as ClientRow);
+          toast.success("Cliente creado y seleccionado");
+        }
+      } else if (resumeProductId) {
+        const draft = loadInvoiceDraft();
+        if (draft) {
+          setClient(draft.client);
+          setReceiver(draft.receiver);
+          setSaveReceiverEdits(draft.saveReceiverEdits);
+          setItems(draft.items);
+        }
+        const { data } = await supabase
+          .from("products")
+          .select("id, description, sat_key, sat_unit, unit_price, iva_rate")
+          .eq("id", resumeProductId)
+          .maybeSingle();
+        if (data) {
+          setItems((prev) => [
+            ...prev,
+            {
+              product_id: data.id,
+              sat_key: data.sat_key,
+              sat_unit: data.sat_unit,
+              description: data.description,
+              quantity: 1,
+              unit_price: Number(data.unit_price),
+              discount: 0,
+              iva_rate: Number(data.iva_rate),
+            },
+          ]);
+          toast.success("Producto creado y agregado a la factura");
+        }
+        setStep(2);
+        clearInvoiceDraft();
+      }
+      window.history.replaceState({}, "", "/invoices/new");
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function goCreateProduct() {
+    if (!client || !receiver) return;
+    saveInvoiceDraft({ client, receiver, saveReceiverEdits, items });
+    window.location.href = "/products/new?return_to=invoice";
   }
 
   async function onIssue() {
@@ -369,6 +470,7 @@ function NewInvoice() {
           <StepItems
             items={items}
             setItems={setItems}
+            onCreateProduct={goCreateProduct}
             onNext={() =>
               items.length > 0 ? setStep(3) : toast.error("Agrega al menos un concepto")
             }
@@ -442,12 +544,12 @@ function StepClient({ onPick }: { onPick: (c: ClientRow) => void }) {
           className="w-full rounded-2xl border border-input bg-surface py-3 pl-11 pr-4 text-sm focus:border-primary focus:outline-none focus:ring-4 focus:ring-ring"
         />
       </div>
-      <Link
-        to="/clients/new"
+      <a
+        href="/clients/new?return_to=invoice"
         className="mt-3 flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border bg-surface py-3 text-sm font-semibold text-primary"
       >
         <Plus className="size-4" /> Crear nuevo cliente
-      </Link>
+      </a>
       <div className="mt-4">
         {isLoading ? (
           <div className="space-y-3">
@@ -492,10 +594,12 @@ function StepClient({ onPick }: { onPick: (c: ClientRow) => void }) {
 function StepItems({
   items,
   setItems,
+  onCreateProduct,
   onNext,
 }: {
   items: LineItem[];
   setItems: (i: LineItem[]) => void;
+  onCreateProduct: () => void;
   onNext: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -684,12 +788,18 @@ function StepItems({
               Agregar manual
             </button>
             <button
-              onClick={() => setOpen(false)}
-              className="rounded-xl bg-muted py-2 text-xs font-semibold text-muted-foreground"
+              onClick={onCreateProduct}
+              className="rounded-xl border border-dashed border-primary/40 bg-background py-2 text-xs font-semibold text-primary"
             >
-              Cancelar
+              Crear producto nuevo
             </button>
           </div>
+          <button
+            onClick={() => setOpen(false)}
+            className="mt-2 w-full rounded-xl bg-muted py-2 text-xs font-semibold text-muted-foreground"
+          >
+            Cancelar
+          </button>
         </div>
       ) : (
         <button

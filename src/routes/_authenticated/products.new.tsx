@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,31 +24,44 @@ function NewProduct() {
     category: "",
   });
 
+  const returnTo = useMemo(
+    () => new URLSearchParams(window.location.search).get("return_to"),
+    [],
+  );
+
   function set<K extends keyof typeof form>(k: K, v: string) {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.description.trim()) { toast.error("La descripción es requerida"); return; }
+    if (!form.description.trim()) { toast.error("El nombre del producto o servicio es requerido"); return; }
     const price = parseFloat(form.unit_price);
     if (!Number.isFinite(price) || price < 0) { toast.error("Precio inválido"); return; }
     setLoading(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
-      const { error } = await supabase.from("products").insert({
-        user_id: userData.user!.id,
-        description: form.description.trim(),
-        sat_key: form.sat_key,
-        sat_unit: form.sat_unit,
-        unit_price: price,
-        iva_rate: parseFloat(form.iva_rate),
-        internal_code: form.internal_code.trim() || null,
-        category: form.category.trim() || null,
-      });
+      const { data: inserted, error } = await supabase
+        .from("products")
+        .insert({
+          user_id: userData.user!.id,
+          description: form.description.trim(),
+          sat_key: form.sat_key,
+          sat_unit: form.sat_unit,
+          unit_price: price,
+          iva_rate: parseFloat(form.iva_rate),
+          internal_code: form.internal_code.trim() || null,
+          category: form.category.trim() || null,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
       toast.success("Producto agregado");
       qc.invalidateQueries({ queryKey: ["products"] });
+      if (returnTo === "invoice") {
+        window.location.href = `/invoices/new?resume_product=${inserted.id}`;
+        return;
+      }
       navigate({ to: "/products" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No pudimos guardar el producto");
@@ -60,15 +73,21 @@ function NewProduct() {
   return (
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
       <header className="flex items-center gap-3">
-        <Link to="/products" className="grid size-10 place-items-center rounded-full border border-border bg-surface">
-          <ArrowLeft className="size-4" />
-        </Link>
+        {returnTo === "invoice" ? (
+          <a href="/invoices/new" className="grid size-10 place-items-center rounded-full border border-border bg-surface">
+            <ArrowLeft className="size-4" />
+          </a>
+        ) : (
+          <Link to="/products" className="grid size-10 place-items-center rounded-full border border-border bg-surface">
+            <ArrowLeft className="size-4" />
+          </Link>
+        )}
         <h1 className="text-xl font-bold tracking-tight">Nuevo producto</h1>
       </header>
 
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
-        <Field label="Descripción">
-          <input value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Servicio de consultoría" className="ff-input" required />
+        <Field label="Nombre del producto o servicio" hint="Así aparecerá en tus facturas">
+          <input value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Ej. Servicio de consultoría, Playera talla M…" className="ff-input" required />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Clave SAT">
@@ -117,11 +136,12 @@ function NewProduct() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
       <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
       {children}
+      {hint && <span className="mt-1 block text-[11px] text-muted-foreground">{hint}</span>}
     </label>
   );
 }
