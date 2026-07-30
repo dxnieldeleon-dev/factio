@@ -363,15 +363,28 @@ async function markStampForReconciliation(
   user: AuthenticatedUser,
   invoiceId: string,
   error: unknown,
+  cfdiId: string | null = null,
 ) {
   const credentials = getSupabaseCredentials();
   if (credentials instanceof Response) return;
   const supabase = createUserScopedClient(credentials, user.accessToken);
   const message =
     error instanceof Error ? error.message : "No fue posible confirmar el resultado del timbrado.";
+  // Cuando ya tenemos el identificador del CFDI en Facturama (la solicitud de
+  // timbrado sí llegó a buen puerto y falló un paso posterior), lo guardamos
+  // para que la reconciliación pueda recuperar el CFDI sin volver a adivinar.
+  const pacResponse =
+    cfdiId || isFacturamaError(error) || isCfdiWorkflowError(error)
+      ? {
+          facturama_cfdi_id: cfdiId,
+          raw_error_response:
+            isFacturamaError(error) || isCfdiWorkflowError(error) ? error.pacResponse : null,
+        }
+      : null;
   const { error: updateError } = await supabase.rpc("mark_cfdi_stamp_reconciliation_required", {
     p_invoice_id: invoiceId,
     p_error: message,
+    p_pac_response: pacResponse,
   });
   if (updateError) {
     console.error("Unable to mark CFDI for reconciliation", {
@@ -601,10 +614,15 @@ Deno.serve(async (req) => {
     );
   }
 
+  // Se declara fuera del try para que, sin importar en qué paso falle el
+  // resto del flujo, el manejo de errores conozca si Facturama ya generó un
+  // CFDI para esta factura y pueda guardarlo para su reconciliación.
+  let cfdiId: string | null = null;
+
   try {
     // Send the validated object as-is; buildCfdiPayload remains the only mapper.
     const stampResponse = await createCfdi(cfdiPayload);
-    const cfdiId = getCfdiId(stampResponse);
+    cfdiId = getCfdiId(stampResponse);
     if (!cfdiId) {
       throw new CfdiWorkflowError(
         "Facturama timbró la solicitud pero no devolvió el identificador del CFDI.",
@@ -636,6 +654,7 @@ Deno.serve(async (req) => {
         user,
         invoiceId,
         new Error("No fue posible guardar el XML del CFDI."),
+        cfdiId,
       );
       return xmlPath;
     }
@@ -644,6 +663,7 @@ Deno.serve(async (req) => {
         user,
         invoiceId,
         new Error("No fue posible guardar el PDF del CFDI."),
+        cfdiId,
       );
       return pdfPath;
     }
@@ -679,10 +699,16 @@ Deno.serve(async (req) => {
       remaining_stamps: walletResult?.[0]?.balance ?? null,
     });
   } catch (error) {
-    if (isFacturamaError(error) && error.status >= 400 && error.status < 500) {
+    if (isFacturamaError(error) && error.status >= 400 && error.status < 500 && !cfdiId) {
+      // Facturama rechazó la solicitud desde el inicio (4xx): nunca se generó
+      // un CFDI, así que es seguro liberar el timbre reservado para reintentar.
       await releaseStampClaim(user, invoiceId, error);
     } else {
-      await markStampForReconciliation(user, invoiceId, error);
+      // Cualquier otro caso es ambiguo (falla de red, 5xx, o un 4xx en un
+      // paso posterior a que Facturama ya generara el CFDI): no se libera el
+      // timbre ni se reintenta el timbrado automáticamente para evitar
+      // duplicar el CFDI ante el SAT. Queda para reconciliación manual/auto.
+      await markStampForReconciliation(user, invoiceId, error, cfdiId);
     }
     return integrationErrorResponse(error);
   }

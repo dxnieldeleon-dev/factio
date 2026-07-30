@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Search, FileText, Download, Share2, ChevronRight, Plus } from "lucide-react";
+import { Search, FileText, Download, Share2, ChevronRight, Plus, AlertTriangle, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
 import { formatMXN, formatDateMX } from "@/lib/format";
 import { openInvoiceDocument } from "@/lib/invoice-documents";
 import { StatusChip } from "./dashboard";
@@ -17,7 +18,7 @@ async function loadInvoices() {
   const { data, error } = await supabase
     .from("invoices")
     .select(
-      "id, series, folio, total, status, created_at, uuid_fiscal, client_snapshot, xml_url, pdf_url",
+      "id, series, folio, total, status, created_at, uuid_fiscal, client_snapshot, xml_url, pdf_url, stamping_status, stamping_error",
     )
     .order("created_at", { ascending: false })
     .limit(200);
@@ -35,19 +36,29 @@ function History() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
-  const filtered = (data ?? []).filter((i) => {
-    if (status !== "all" && i.status !== status) return false;
-    if (!q) return true;
-    const t = q.toLowerCase();
-    const snap = (i.client_snapshot as { legal_name?: string; rfc?: string } | null) ?? {};
-    return (
-      (snap.legal_name ?? "").toLowerCase().includes(t) ||
-      (snap.rfc ?? "").toLowerCase().includes(t) ||
-      `${i.series}-${i.folio}`.toLowerCase().includes(t) ||
-      (i.uuid_fiscal ?? "").toLowerCase().includes(t)
-    );
-  });
+  const pending = (data ?? []).filter((i) => i.stamping_status === "reconciliation_required");
+
+  const filtered = (data ?? [])
+    .filter((i) => i.stamping_status !== "reconciliation_required")
+    .filter((i) => {
+      if (status !== "all" && i.status !== status) return false;
+      if (!q) return true;
+      const t = q.toLowerCase();
+      const snap = (i.client_snapshot as { legal_name?: string; rfc?: string } | null) ?? {};
+      return (
+        (snap.legal_name ?? "").toLowerCase().includes(t) ||
+        (snap.rfc ?? "").toLowerCase().includes(t) ||
+        `${i.series}-${i.folio}`.toLowerCase().includes(t) ||
+        (i.uuid_fiscal ?? "").toLowerCase().includes(t)
+      );
+    });
+
+  function refreshAfterReconciliation() {
+    qc.invalidateQueries({ queryKey: ["invoices", "history"] });
+    qc.invalidateQueries({ queryKey: ["dashboard"] });
+  }
 
   return (
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
@@ -66,6 +77,21 @@ function History() {
           <Plus className="size-5" strokeWidth={2.4} />
         </Link>
       </header>
+
+      {pending.length > 0 && (
+        <section className="mt-5 space-y-2">
+          <h2 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+            <AlertTriangle className="size-3.5" /> Requieren conciliación ({pending.length})
+          </h2>
+          {pending.map((invoice) => (
+            <ReconciliationCard
+              key={invoice.id}
+              invoice={invoice}
+              onResolved={refreshAfterReconciliation}
+            />
+          ))}
+        </section>
+      )}
 
       <div className="relative mt-5">
         <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -187,6 +213,109 @@ function History() {
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+interface PendingInvoice {
+  id: string;
+  series: string;
+  folio: number;
+  total: number;
+  stamping_error: string | null;
+}
+
+function ReconciliationCard({
+  invoice,
+  onResolved,
+}: {
+  invoice: PendingInvoice;
+  onResolved: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [showManual, setShowManual] = useState(false);
+  const [manualId, setManualId] = useState("");
+  const folioFmt = `${invoice.series}-${String(invoice.folio).padStart(6, "0")}`;
+
+  async function call(body: Record<string, unknown>) {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("facturama-reconcile-cfdi", {
+        body: { invoice_id: invoice.id, ...body },
+      });
+      if (error) {
+        throw new Error(await getEdgeFunctionErrorMessage(error, "No fue posible resolver la factura."));
+      }
+      if (!data?.ok) throw new Error(data?.reason ?? "No fue posible resolver la factura.");
+      toast.success(data.resolved ? "Factura conciliada: se recuperó el CFDI." : "Factura liberada para reintentar.");
+      onResolved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No pudimos resolver la factura");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-xs font-semibold uppercase tracking-tight">{folioFmt}</p>
+          <p className="mt-0.5 text-sm font-semibold">{formatMXN(invoice.total)}</p>
+        </div>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-amber-900/80">
+        {invoice.stamping_error ?? "No se pudo confirmar el resultado del timbrado con Facturama."}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => call({ action: "auto" })}
+          className="inline-flex items-center gap-1.5 rounded-full bg-amber-900 px-3 py-1.5 text-[11px] font-semibold text-amber-50 disabled:opacity-60"
+        >
+          {busy ? <Loader2 className="size-3 animate-spin" /> : null} Reintentar automáticamente
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setShowManual((v) => !v)}
+          className="rounded-full border border-amber-300 bg-background px-3 py-1.5 text-[11px] font-semibold text-amber-900"
+        >
+          Resolver manualmente
+        </button>
+      </div>
+      {showManual && (
+        <div className="mt-3 space-y-2 border-t border-amber-200 pt-3">
+          <p className="text-[11px] text-amber-900/80">
+            Verifica en el panel de Facturama si esta factura sí se timbró.
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={manualId}
+              onChange={(e) => setManualId(e.target.value)}
+              placeholder="ID del CFDI en Facturama"
+              className="min-w-0 flex-1 rounded-xl border border-amber-300 bg-background px-3 py-2 text-xs"
+            />
+            <button
+              type="button"
+              disabled={busy || !manualId.trim()}
+              onClick={() => call({ action: "confirm_stamped", facturama_cfdi_id: manualId.trim() })}
+              className="shrink-0 rounded-xl bg-amber-900 px-3 py-2 text-[11px] font-semibold text-amber-50 disabled:opacity-60"
+            >
+              Sí se timbró
+            </button>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => call({ action: "confirm_not_stamped" })}
+            className="w-full rounded-xl border border-amber-300 bg-background py-2 text-[11px] font-semibold text-amber-900 disabled:opacity-60"
+          >
+            Confirmar que no se timbró (liberar timbre)
+          </button>
+        </div>
+      )}
     </div>
   );
 }
