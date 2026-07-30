@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { isCsdConfigured, loadCompanyProfile } from "@/features/profile/company-profile";
 
-export const Route = createFileRoute("/_authenticated/profile")({ component: Profile });
+export const Route = createFileRoute("/_authenticated/profile/")({ component: Profile });
 
 interface PlanRow { id: string; key: string; nombre: string; precio_mxn: number; facturas_incluidas: number; features: Record<string, boolean>; }
 interface SubscriptionRow { id: string; plan_id: string; status: string; current_period_end: string | null; }
