@@ -1,0 +1,260 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { COMMON_SAT_KEYS, COMMON_SAT_UNITS } from "@/lib/sat-catalogs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
+export const Route = createFileRoute("/_authenticated/products/$id/edit")({
+  component: EditProduct,
+});
+
+type Product = {
+  id: string;
+  description: string;
+  sat_key: string;
+  sat_unit: string;
+  unit_price: number;
+  iva_rate: number;
+  internal_code: string | null;
+  category: string | null;
+};
+
+async function loadProduct(id: string): Promise<Product> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, description, sat_key, sat_unit, unit_price, iva_rate, internal_code, category")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Producto no encontrado");
+  return data as Product;
+}
+
+function EditProduct() {
+  const { id } = Route.useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["products", id],
+    queryFn: () => loadProduct(id),
+  });
+  const [form, setForm] = useState<Product | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (data) setForm(data);
+  }, [data]);
+  function set<K extends keyof Product>(key: K, value: Product[K]) {
+    setForm((current) => (current ? { ...current, [key]: value } : current));
+  }
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    if (!form) return;
+    if (!form.description.trim()) return toast.error("La descripción es requerida");
+    if (!Number.isFinite(form.unit_price) || form.unit_price < 0)
+      return toast.error("Precio inválido");
+    setSaving(true);
+    try {
+      const { error: updateError } = await supabase
+        .from("products")
+        .update({
+          description: form.description.trim(),
+          sat_key: form.sat_key,
+          sat_unit: form.sat_unit,
+          unit_price: form.unit_price,
+          iva_rate: form.iva_rate,
+          internal_code: form.internal_code?.trim() || null,
+          category: form.category?.trim() || null,
+        })
+        .eq("id", id);
+      if (updateError) throw updateError;
+      toast.success("Producto actualizado");
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      navigate({ to: "/products" });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "No pudimos guardar los cambios");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove() {
+    setDeleting(true);
+    try {
+      const { error: deleteError } = await supabase.from("products").delete().eq("id", id);
+      if (deleteError) throw deleteError;
+      toast.success("Producto eliminado");
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      navigate({ to: "/products" });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "No pudimos eliminar el producto");
+      setDeleting(false);
+    }
+  }
+
+  if (isLoading || !form)
+    return (
+      <div className="px-5 pt-12">
+        <div className="h-10 w-40 animate-pulse rounded-full bg-muted" />
+      </div>
+    );
+  if (error)
+    return (
+      <div className="px-5 pt-12">
+        <p className="text-destructive">{error.message}</p>
+        <Link to="/products">Volver</Link>
+      </div>
+    );
+
+  return (
+    <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
+      <header className="flex items-center gap-3">
+        <Link
+          to="/products"
+          className="grid size-10 place-items-center rounded-full border border-border bg-surface"
+        >
+          <ArrowLeft className="size-4" />
+        </Link>
+        <h1 className="text-xl font-bold">Editar producto</h1>
+      </header>
+      <form onSubmit={save} className="mt-6 space-y-4">
+        <Field label="Descripción">
+          <input
+            className="ff-input"
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Clave SAT">
+            <select
+              className="ff-input"
+              value={form.sat_key}
+              onChange={(e) => set("sat_key", e.target.value)}
+            >
+              {COMMON_SAT_KEYS.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.code}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Unidad SAT">
+            <select
+              className="ff-input"
+              value={form.sat_unit}
+              onChange={(e) => set("sat_unit", e.target.value)}
+            >
+              {COMMON_SAT_UNITS.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.code} — {item.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Precio unitario">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className="ff-input"
+              value={form.unit_price}
+              onChange={(e) => set("unit_price", Number(e.target.value))}
+            />
+          </Field>
+          <Field label="IVA">
+            <select
+              className="ff-input"
+              value={form.iva_rate}
+              onChange={(e) => set("iva_rate", Number(e.target.value))}
+            >
+              <option value="0.16">16%</option>
+              <option value="0.08">8%</option>
+              <option value="0">0% / Exento</option>
+            </select>
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Código interno">
+            <input
+              className="ff-input"
+              value={form.internal_code ?? ""}
+              onChange={(e) => set("internal_code", e.target.value)}
+            />
+          </Field>
+          <Field label="Categoría">
+            <input
+              className="ff-input"
+              value={form.category ?? ""}
+              onChange={(e) => set("category", e.target.value)}
+            />
+          </Field>
+        </div>
+        <button
+          disabled={saving}
+          className="flex w-full justify-center rounded-2xl bg-foreground py-4 text-sm font-semibold text-background disabled:opacity-60"
+        >
+          {saving ? <Loader2 className="size-4 animate-spin" /> : "Guardar cambios"}
+        </button>
+      </form>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <button
+            disabled={deleting}
+            className="mt-3 flex w-full justify-center gap-2 rounded-2xl border border-destructive/30 py-3.5 text-sm font-semibold text-destructive"
+          >
+            {deleting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <>
+                <Trash2 className="size-4" />
+                Eliminar producto
+              </>
+            )}
+          </button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este producto?</AlertDialogTitle>
+            <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={remove} className="bg-destructive">
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <style>{`.ff-input{width:100%;border-radius:1rem;border:1px solid var(--input);background:var(--surface);padding:.875rem 1rem;font-size:.9rem}`}</style>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}

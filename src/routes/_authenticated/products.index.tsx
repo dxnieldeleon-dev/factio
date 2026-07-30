@@ -26,17 +26,26 @@ function ProductsList() {
   const filtered = (data ?? []).filter((p) => {
     if (!q) return true;
     const t = q.toLowerCase();
-    return p.description.toLowerCase().includes(t) || p.sat_key.toLowerCase().includes(t) || (p.internal_code ?? "").toLowerCase().includes(t);
+    return (
+      p.description.toLowerCase().includes(t) ||
+      p.sat_key.toLowerCase().includes(t) ||
+      (p.internal_code ?? "").toLowerCase().includes(t)
+    );
   });
 
   return (
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
       <header className="flex items-center justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Catálogo</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Catálogo
+          </p>
           <h1 className="text-2xl font-bold tracking-tight">Productos</h1>
         </div>
-        <Link to="/products/new" className="grid size-11 place-items-center rounded-full bg-foreground text-background shadow-lift transition active:scale-95">
+        <Link
+          to="/products/new"
+          className="grid size-11 place-items-center rounded-full bg-foreground text-background shadow-lift transition active:scale-95"
+        >
           <Plus className="size-5" strokeWidth={2.4} />
         </Link>
       </header>
@@ -53,29 +62,52 @@ function ProductsList() {
 
       <div className="mt-5">
         {isLoading ? (
-          <div className="space-y-3">{[0, 1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-2xl border border-border bg-surface" />)}</div>
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-20 animate-pulse rounded-2xl border border-border bg-surface"
+              />
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={Package}
             title={q ? "Sin resultados" : "Aún no tienes productos"}
-            description={q ? "Intenta con otra búsqueda." : "Agrega tus productos o servicios para facturar más rápido."}
-            action={!q && (
-              <Link to="/products/new" className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background">
-                <Plus className="size-4" /> Agregar producto
-              </Link>
-            )}
+            description={
+              q
+                ? "Intenta con otra búsqueda."
+                : "Agrega tus productos o servicios para facturar más rápido."
+            }
+            action={
+              !q && (
+                <Link
+                  to="/products/new"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background"
+                >
+                  <Plus className="size-4" /> Agregar producto
+                </Link>
+              )
+            }
           />
         ) : (
           <ul className="divide-y divide-border rounded-3xl border border-border bg-surface">
             {filtered.map((p) => (
-              <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-3.5">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold">{p.description}</p>
-                  <p className="mt-0.5 font-mono text-[10px] uppercase text-muted-foreground">
-                    SAT {p.sat_key} · {p.sat_unit}{p.internal_code ? ` · ${p.internal_code}` : ""}
-                  </p>
-                </div>
-                <p className="shrink-0 font-bold">{formatMXN(p.unit_price)}</p>
+              <li key={p.id}>
+                <Link
+                  to="/products/$id/edit"
+                  params={{ id: p.id }}
+                  className="flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-muted/40"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{p.description}</p>
+                    <p className="mt-0.5 font-mono text-[10px] uppercase text-muted-foreground">
+                      SAT {p.sat_key} · {p.sat_unit}
+                      {p.internal_code ? ` · ${p.internal_code}` : ""}
+                    </p>
+                  </div>
+                  <p className="shrink-0 font-bold">{formatMXN(p.unit_price)}</p>
+                </Link>
               </li>
             ))}
           </ul>

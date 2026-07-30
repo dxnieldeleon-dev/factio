@@ -1,8 +1,8 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Search, FileText, Download, Share2, ChevronRight } from "lucide-react";
+import { Search, FileText, Download, Share2, ChevronRight, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatMXN, formatDateMX } from "@/lib/format";
 import { openInvoiceDocument } from "@/lib/invoice-documents";
@@ -51,11 +51,20 @@ function History() {
 
   return (
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
-      <header>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Facturas
-        </p>
-        <h1 className="text-2xl font-bold tracking-tight">Facturas</h1>
+      <header className="flex items-center justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Facturas
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight">Facturas</h1>
+        </div>
+        <Link
+          to="/invoices/new"
+          className="grid size-11 place-items-center rounded-full bg-foreground text-background shadow-lift transition active:scale-95"
+          aria-label="Nueva factura"
+        >
+          <Plus className="size-5" strokeWidth={2.4} />
+        </Link>
       </header>
 
       <div className="relative mt-5">
