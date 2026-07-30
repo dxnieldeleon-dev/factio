@@ -71,14 +71,16 @@ function validateCsd(
     });
   } catch (cause) {
     const message = String(cause instanceof Error ? cause.message : cause).toLowerCase();
-    // Temporary diagnostic: only the error text (no key bytes, no password).
-    console.error("CSD key parse failed:", message);
+    const isPasswordIssue = /decrypt|passphrase|password|wrong tag/i.test(message);
     return {
       ok: false,
-      field: /decrypt|passphrase|password|wrong tag/i.test(message) ? "password" : "key",
-      error: /decrypt|passphrase|password|wrong tag/i.test(message)
+      field: isPasswordIssue ? "password" : "key",
+      // Temporary diagnostic: surfaces the raw crypto error text (no key
+      // bytes, no password) directly in the UI so it can be read without
+      // access to function logs.
+      error: isPasswordIssue
         ? "La contraseña de la llave privada es incorrecta."
-        : "No fue posible leer la llave privada .key.",
+        : `No fue posible leer la llave privada .key. (diagnóstico: ${message})`,
     };
   }
 
