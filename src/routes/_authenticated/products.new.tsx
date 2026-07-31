@@ -5,6 +5,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { COMMON_SAT_KEYS, COMMON_SAT_UNITS } from "@/lib/sat-catalogs";
 import { useQueryClient } from "@tanstack/react-query";
+import { SatKeyPicker } from "@/components/sat-key-picker";
 
 export const Route = createFileRoute("/_authenticated/products/new")({
   component: NewProduct,
@@ -37,10 +38,7 @@ function NewProduct() {
   const [kind, setKind] = useState<"servicio" | "producto">("servicio");
   const [serviceTypeId, setServiceTypeId] = useState<string>("");
 
-  const returnTo = useMemo(
-    () => new URLSearchParams(window.location.search).get("return_to"),
-    [],
-  );
+  const returnTo = useMemo(() => new URLSearchParams(window.location.search).get("return_to"), []);
 
   useEffect(() => {
     (async () => {
@@ -67,7 +65,8 @@ function NewProduct() {
     })();
   }, []);
 
-  const showSimplifiedService = hasProfile && kind === "servicio" && serviceTypeId !== OTHER_SERVICE;
+  const showSimplifiedService =
+    hasProfile && kind === "servicio" && serviceTypeId !== OTHER_SERVICE;
   const showAdvancedForm = !hasProfile || kind === "producto" || serviceTypeId === OTHER_SERVICE;
 
   function set<K extends keyof typeof form>(k: K, v: string) {
@@ -81,7 +80,12 @@ function NewProduct() {
     }
     const type = serviceTypes.find((t) => t.id === id);
     if (type) {
-      setForm((f) => ({ ...f, description: type.name, sat_key: type.sat_key, sat_unit: type.sat_unit }));
+      setForm((f) => ({
+        ...f,
+        description: type.name,
+        sat_key: type.sat_key,
+        sat_unit: type.sat_unit,
+      }));
     }
   }
 
@@ -99,9 +103,15 @@ function NewProduct() {
       toast.error("Selecciona el tipo de servicio");
       return;
     }
-    if (!form.description.trim()) { toast.error("El nombre del producto o servicio es requerido"); return; }
+    if (!form.description.trim()) {
+      toast.error("El nombre del producto o servicio es requerido");
+      return;
+    }
     const price = parseFloat(form.unit_price);
-    if (!Number.isFinite(price) || price < 0) { toast.error("Precio inválido"); return; }
+    if (!Number.isFinite(price) || price < 0) {
+      toast.error("Precio inválido");
+      return;
+    }
     setLoading(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -138,16 +148,26 @@ function NewProduct() {
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
       <header className="flex items-center gap-3">
         {returnTo === "invoice" ? (
-          <a href="/invoices/new" className="grid size-10 place-items-center rounded-full border border-border bg-surface">
+          <a
+            href="/invoices/new"
+            className="grid size-10 place-items-center rounded-full border border-border bg-surface"
+          >
             <ArrowLeft className="size-4" />
           </a>
         ) : (
-          <Link to="/products" className="grid size-10 place-items-center rounded-full border border-border bg-surface">
+          <Link
+            to="/products"
+            className="grid size-10 place-items-center rounded-full border border-border bg-surface"
+          >
             <ArrowLeft className="size-4" />
           </Link>
         )}
         <h1 className="text-xl font-bold tracking-tight">
-          {showSimplifiedService ? "Nuevo servicio" : hasProfile ? "Nuevo producto o servicio" : "Nuevo producto"}
+          {showSimplifiedService
+            ? "Nuevo servicio"
+            : hasProfile
+              ? "Nuevo producto o servicio"
+              : "Nuevo producto"}
         </h1>
       </header>
 
@@ -179,9 +199,13 @@ function NewProduct() {
               className="ff-input"
               required
             >
-              <option value="" disabled>Selecciona uno…</option>
+              <option value="" disabled>
+                Selecciona uno…
+              </option>
               {serviceTypes.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
               ))}
               <option value={OTHER_SERVICE}>Otro servicio…</option>
             </select>
@@ -191,14 +215,41 @@ function NewProduct() {
         {showSimplifiedService && (
           <>
             <Field label="Nombre del servicio" hint="Así aparecerá en tus facturas">
-              <input value={form.description} onChange={(e) => set("description", e.target.value)} className="ff-input" required />
+              <input
+                value={form.description}
+                onChange={(e) => set("description", e.target.value)}
+                className="ff-input"
+                required
+              />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Precio unitario (MXN)">
-                <input type="number" inputMode="decimal" step="0.01" min="0" value={form.unit_price} onChange={(e) => set("unit_price", e.target.value)} placeholder="0.00" className="ff-input font-mono" required />
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    $
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={form.unit_price}
+                    onChange={(e) => set("unit_price", e.target.value)}
+                    placeholder="0.00"
+                    className="ff-input pl-7 font-mono"
+                    required
+                  />
+                </div>
               </Field>
-              <Field label="IVA">
-                <select value={form.iva_rate} onChange={(e) => set("iva_rate", e.target.value)} className="ff-input">
+              <Field
+                label="IVA"
+                hint="16% aplica casi siempre. Usa 8% solo si facturas desde zona fronteriza."
+              >
+                <select
+                  value={form.iva_rate}
+                  onChange={(e) => set("iva_rate", e.target.value)}
+                  className="ff-input"
+                >
                   <option value="0.16">16%</option>
                   <option value="0.08">8% (frontera)</option>
                   <option value="0">0% / Exento</option>
@@ -211,26 +262,68 @@ function NewProduct() {
         {showAdvancedForm && (
           <>
             <Field label="Nombre del producto o servicio" hint="Así aparecerá en tus facturas">
-              <input value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Ej. Servicio de consultoría, Playera talla M…" className="ff-input" required />
+              <input
+                value={form.description}
+                onChange={(e) => set("description", e.target.value)}
+                placeholder="Ej. Servicio de consultoría, Playera talla M…"
+                className="ff-input"
+                required
+              />
+            </Field>
+            <Field
+              label="Clave SAT"
+              hint="Describe qué vendes; el SAT usa este código para clasificarlo. Si no encuentras algo parecido, usa «No existe en el catálogo»."
+            >
+              <SatKeyPicker
+                value={form.sat_key}
+                onChange={(code) => set("sat_key", code)}
+                items={COMMON_SAT_KEYS}
+              />
+            </Field>
+            <Field
+              label="Unidad SAT"
+              hint="Cómo se mide lo que vendes (por servicio, por hora, por pieza…)."
+            >
+              <select
+                value={form.sat_unit}
+                onChange={(e) => set("sat_unit", e.target.value)}
+                className="ff-input"
+              >
+                {COMMON_SAT_UNITS.map((u) => (
+                  <option key={u.code} value={u.code}>
+                    {u.code} — {u.name}
+                  </option>
+                ))}
+              </select>
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Clave SAT">
-                <select value={form.sat_key} onChange={(e) => set("sat_key", e.target.value)} className="ff-input">
-                  {COMMON_SAT_KEYS.map((k) => <option key={k.code} value={k.code}>{k.code}</option>)}
-                </select>
-              </Field>
-              <Field label="Unidad SAT">
-                <select value={form.sat_unit} onChange={(e) => set("sat_unit", e.target.value)} className="ff-input">
-                  {COMMON_SAT_UNITS.map((u) => <option key={u.code} value={u.code}>{u.code} — {u.name}</option>)}
-                </select>
-              </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
               <Field label="Precio unitario (MXN)">
-                <input type="number" inputMode="decimal" step="0.01" min="0" value={form.unit_price} onChange={(e) => set("unit_price", e.target.value)} placeholder="0.00" className="ff-input font-mono" required />
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    $
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={form.unit_price}
+                    onChange={(e) => set("unit_price", e.target.value)}
+                    placeholder="0.00"
+                    className="ff-input pl-7 font-mono"
+                    required
+                  />
+                </div>
               </Field>
-              <Field label="IVA">
-                <select value={form.iva_rate} onChange={(e) => set("iva_rate", e.target.value)} className="ff-input">
+              <Field
+                label="IVA"
+                hint="16% aplica casi siempre. Usa 8% solo si facturas desde zona fronteriza."
+              >
+                <select
+                  value={form.iva_rate}
+                  onChange={(e) => set("iva_rate", e.target.value)}
+                  className="ff-input"
+                >
                   <option value="0.16">16%</option>
                   <option value="0.08">8% (frontera)</option>
                   <option value="0">0% / Exento</option>
@@ -238,11 +331,24 @@ function NewProduct() {
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Código interno (opcional)">
-                <input value={form.internal_code} onChange={(e) => set("internal_code", e.target.value)} placeholder="PROD-001" className="ff-input font-mono" />
+              <Field
+                label="Código interno (opcional)"
+                hint="Para tu propio catálogo; no aparece en la factura."
+              >
+                <input
+                  value={form.internal_code}
+                  onChange={(e) => set("internal_code", e.target.value)}
+                  placeholder="PROD-001"
+                  className="ff-input font-mono"
+                />
               </Field>
-              <Field label="Categoría (opcional)">
-                <input value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="Servicios" className="ff-input" />
+              <Field label="Categoría (opcional)" hint="Te ayuda a organizar tu catálogo.">
+                <input
+                  value={form.category}
+                  onChange={(e) => set("category", e.target.value)}
+                  placeholder="Servicios"
+                  className="ff-input"
+                />
               </Field>
             </div>
           </>
@@ -262,10 +368,20 @@ function NewProduct() {
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
       {children}
       {hint && <span className="mt-1 block text-[11px] text-muted-foreground">{hint}</span>}
     </label>
