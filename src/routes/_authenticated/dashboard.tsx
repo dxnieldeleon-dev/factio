@@ -6,7 +6,7 @@ import {
   Bell,
   TrendingUp,
   Users as UsersIcon,
-  FileText,
+  Percent,
   LogOut,
   ChevronRight,
   ShieldAlert,
@@ -22,8 +22,8 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 interface DashboardData {
-  todayCount: number;
-  monthTotal: number;
+  monthIncome: number;
+  monthIva: number;
   clientsCount: number;
   recent: Array<{
     id: string;
@@ -47,7 +47,6 @@ async function loadDashboard(): Promise<DashboardData> {
   const email = userData.user?.email ?? "";
 
   const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   const companyRes = await supabase
@@ -59,15 +58,10 @@ async function loadDashboard(): Promise<DashboardData> {
 
   const companyId = companyRes.data?.id;
 
-  const [todayRes, monthRes, clientsRes, recentRes, walletRes, subRes] = await Promise.all([
+  const [monthRes, clientsRes, recentRes, walletRes, subRes] = await Promise.all([
     supabase
       .from("invoices")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "issued")
-      .gte("created_at", startOfDay),
-    supabase
-      .from("invoices")
-      .select("total")
+      .select("subtotal, iva_total")
       .eq("status", "issued")
       .gte("created_at", startOfMonth),
     supabase.from("clients").select("id", { count: "exact", head: true }),
@@ -88,7 +82,8 @@ async function loadDashboard(): Promise<DashboardData> {
       : Promise.resolve({ data: null }),
   ]);
 
-  const monthTotal = (monthRes.data ?? []).reduce((a, r) => a + Number(r.total ?? 0), 0);
+  const monthIncome = (monthRes.data ?? []).reduce((a, r) => a + Number(r.subtotal ?? 0), 0);
+  const monthIva = (monthRes.data ?? []).reduce((a, r) => a + Number(r.iva_total ?? 0), 0);
   const c = companyRes.data;
   const csdReady = !!(
     c?.csd_cer_url &&
@@ -103,8 +98,8 @@ async function loadDashboard(): Promise<DashboardData> {
   const planData = (subRes.data as { plan?: { facturas_incluidas?: number } | null } | null)?.plan;
 
   return {
-    todayCount: todayRes.count ?? 0,
-    monthTotal,
+    monthIncome,
+    monthIva,
     clientsCount: clientsRes.count ?? 0,
     recent: (recentRes.data as DashboardData["recent"]) ?? [],
     businessName: c?.trade_name || c?.legal_name || email.split("@")[0] || "Mi negocio",
@@ -233,22 +228,22 @@ function Dashboard() {
 
       <section className="mt-6 grid grid-cols-2 gap-3 animate-reveal">
         <div className="col-span-2 rounded-3xl border border-border bg-surface p-5 shadow-soft">
-          <p className="text-sm text-muted-foreground">Facturación del mes</p>
+          <p className="text-sm text-muted-foreground">Ingresos del mes</p>
           <p className="mt-1 text-3xl font-extrabold tracking-tight">
-            {isLoading ? "—" : formatMXN(data?.monthTotal ?? 0)}
+            {isLoading ? "—" : formatMXN(data?.monthIncome ?? 0)}
             <span className="ml-2 align-middle text-sm font-medium text-muted-foreground">MXN</span>
           </p>
           <div className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
             <TrendingUp className="size-3.5" />
-            <span>Calculado en tiempo real</span>
+            <span>Sin IVA · calculado en tiempo real</span>
           </div>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4 shadow-soft">
           <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-            <FileText className="size-3.5" /> Facturas hoy
+            <Percent className="size-3.5" /> IVA del mes
           </div>
           <p className="mt-1 text-2xl font-bold tracking-tight">
-            {isLoading ? "—" : data?.todayCount}
+            {isLoading ? "—" : formatMXN(data?.monthIva ?? 0)}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4 shadow-soft">
