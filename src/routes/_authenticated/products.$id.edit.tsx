@@ -5,6 +5,7 @@ import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { COMMON_SAT_KEYS, COMMON_SAT_UNITS } from "@/lib/sat-catalogs";
+import { SatKeyPicker } from "@/components/sat-key-picker";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -140,46 +141,53 @@ function EditProduct() {
             onChange={(e) => set("description", e.target.value)}
           />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Clave SAT">
-            <select
-              className="ff-input"
-              value={form.sat_key}
-              onChange={(e) => set("sat_key", e.target.value)}
-            >
-              {COMMON_SAT_KEYS.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.code}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Unidad SAT">
-            <select
-              className="ff-input"
-              value={form.sat_unit}
-              onChange={(e) => set("sat_unit", e.target.value)}
-            >
-              {COMMON_SAT_UNITS.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.code} — {item.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        <Field
+          label="Clave SAT"
+          hint="Describe qué vendes; el SAT usa este código para clasificarlo. Si no encuentras algo parecido, usa «No existe en el catálogo»."
+        >
+          <SatKeyPicker
+            value={form.sat_key}
+            onChange={(code) => set("sat_key", code)}
+            items={COMMON_SAT_KEYS}
+          />
+        </Field>
+        <Field
+          label="Unidad SAT"
+          hint="Cómo se mide lo que vendes (por servicio, por hora, por pieza…)."
+        >
+          <select
+            className="ff-input"
+            value={form.sat_unit}
+            onChange={(e) => set("sat_unit", e.target.value)}
+          >
+            {COMMON_SAT_UNITS.map((item) => (
+              <option key={item.code} value={item.code}>
+                {item.code} — {item.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Precio unitario">
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              className="ff-input"
-              value={form.unit_price}
-              onChange={(e) => set("unit_price", Number(e.target.value))}
-            />
+            <div className="relative">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                $
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                className="ff-input pl-7 font-mono"
+                value={form.unit_price}
+                onChange={(e) => set("unit_price", Number(e.target.value))}
+              />
+            </div>
           </Field>
-          <Field label="IVA">
+          <Field
+            label="IVA"
+            hint="16% aplica casi siempre. Usa 8% solo si facturas desde zona fronteriza."
+          >
             <select
               className="ff-input"
               value={form.iva_rate}
@@ -192,14 +200,14 @@ function EditProduct() {
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Código interno">
+          <Field label="Código interno" hint="Para tu propio catálogo; no aparece en la factura.">
             <input
               className="ff-input"
               value={form.internal_code ?? ""}
               onChange={(e) => set("internal_code", e.target.value)}
             />
           </Field>
-          <Field label="Categoría">
+          <Field label="Categoría" hint="Te ayuda a organizar tu catálogo.">
             <input
               className="ff-input"
               value={form.category ?? ""}
@@ -248,13 +256,22 @@ function EditProduct() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
       <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
       {children}
+      {hint && <span className="mt-1 block text-[11px] text-muted-foreground">{hint}</span>}
     </label>
   );
 }
