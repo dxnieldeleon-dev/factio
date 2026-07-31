@@ -123,7 +123,7 @@ function InvoiceDetail() {
       }
       toast.success(
         response.cancelled
-          ? "Factura cancelada ante el PAC"
+          ? "Factura cancelada ante el SAT"
           : "Solicitud de cancelación enviada; está pendiente de aceptación",
       );
       setConfirmOpen(false);
@@ -200,7 +200,7 @@ function InvoiceDetail() {
         )}
         {cancellationPending && (
           <p className="mt-2 text-xs text-amber-700">
-            Solicitud de cancelación enviada al PAC; pendiente de aceptación.
+            Solicitud de cancelación enviada al SAT; pendiente de aceptación.
           </p>
         )}
         {inv.uuid_fiscal && (
@@ -357,8 +357,8 @@ function InvoiceDetail() {
               producción se enviará la solicitud al SAT.
             </AlertDialogDescription>
             <p className="text-sm text-muted-foreground">
-              La solicitud se enviará a Facturama y al PAC. La factura sólo se marcará como
-              cancelada si el PAC confirma la cancelación.
+              La solicitud se enviará al SAT. La factura sólo se marcará como cancelada si se
+              confirma la cancelación.
             </p>
           </AlertDialogHeader>
           <div className="space-y-2">

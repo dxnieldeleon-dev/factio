@@ -1197,10 +1197,6 @@ function StepReview(props: StepReviewProps) {
           </>
         )}
       </button>
-      <p className="text-center text-[10px] text-muted-foreground">
-        Conexión con PAC en modo demo · Configura tu PAC en producción.
-      </p>
-
       <style>{`.ff-mini{width:100%;border-radius:0.75rem;border:1px solid var(--input);background:var(--background);padding:0.5rem 0.625rem;font-size:0.8rem;outline:none}.ff-mini:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--ring)}`}</style>
     </div>
   );

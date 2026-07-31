@@ -2,7 +2,17 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Search, FileText, Download, Share2, ChevronRight, Plus, AlertTriangle, Loader2, Trash2 } from "lucide-react";
+import {
+  Search,
+  FileText,
+  Download,
+  Share2,
+  ChevronRight,
+  Plus,
+  AlertTriangle,
+  Loader2,
+  Trash2,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
 import { formatMXN, formatDateMX } from "@/lib/format";
@@ -49,6 +59,14 @@ function History() {
   const qc = useQueryClient();
   const [draftToDelete, setDraftToDelete] = useState<{ id: string; folioFmt: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const { data: isAdmin } = useQuery({
+    queryKey: ["auth", "isAdmin"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("current_user_is_admin");
+      return error ? false : (data ?? false);
+    },
+  });
 
   const pending = (data ?? []).filter((i) => i.stamping_status === "reconciliation_required");
 
@@ -121,6 +139,7 @@ function History() {
               key={invoice.id}
               invoice={invoice}
               onResolved={refreshAfterReconciliation}
+              isAdmin={!!isAdmin}
             />
           ))}
         </section>
@@ -267,9 +286,9 @@ function History() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar este borrador?</AlertDialogTitle>
             <AlertDialogDescription>
-              {draftToDelete?.folioFmt} se eliminará por completo. Esta acción no se puede
-              deshacer. Solo se pueden eliminar borradores — las facturas ya timbradas no se
-              pueden borrar, se cancelan.
+              {draftToDelete?.folioFmt} se eliminará por completo. Esta acción no se puede deshacer.
+              Solo se pueden eliminar borradores — las facturas ya timbradas no se pueden borrar, se
+              cancelan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -302,9 +321,11 @@ interface PendingInvoice {
 function ReconciliationCard({
   invoice,
   onResolved,
+  isAdmin,
 }: {
   invoice: PendingInvoice;
   onResolved: () => void;
+  isAdmin: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [showManual, setShowManual] = useState(false);
@@ -318,10 +339,16 @@ function ReconciliationCard({
         body: { invoice_id: invoice.id, ...body },
       });
       if (error) {
-        throw new Error(await getEdgeFunctionErrorMessage(error, "No fue posible resolver la factura."));
+        throw new Error(
+          await getEdgeFunctionErrorMessage(error, "No fue posible resolver la factura."),
+        );
       }
       if (!data?.ok) throw new Error(data?.reason ?? "No fue posible resolver la factura.");
-      toast.success(data.resolved ? "Factura conciliada: se recuperó el CFDI." : "Factura liberada para reintentar.");
+      toast.success(
+        data.resolved
+          ? "Factura conciliada: se recuperó el CFDI."
+          : "Factura liberada para reintentar.",
+      );
       onResolved();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No pudimos resolver la factura");
@@ -339,7 +366,7 @@ function ReconciliationCard({
         </div>
       </div>
       <p className="mt-2 text-xs leading-relaxed text-amber-900/80">
-        {invoice.stamping_error ?? "No se pudo confirmar el resultado del timbrado con Facturama."}
+        {invoice.stamping_error ?? "No se pudo confirmar el resultado del timbrado."}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button
@@ -350,16 +377,23 @@ function ReconciliationCard({
         >
           {busy ? <Loader2 className="size-3 animate-spin" /> : null} Reintentar automáticamente
         </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => setShowManual((v) => !v)}
-          className="rounded-full border border-amber-300 bg-background px-3 py-1.5 text-[11px] font-semibold text-amber-900"
-        >
-          Resolver manualmente
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setShowManual((v) => !v)}
+            className="rounded-full border border-amber-300 bg-background px-3 py-1.5 text-[11px] font-semibold text-amber-900"
+          >
+            Resolver manualmente
+          </button>
+        )}
       </div>
-      {showManual && (
+      {!isAdmin && (
+        <p className="mt-2 text-[11px] text-amber-900/60">
+          Si el problema continúa después de reintentar, contáctanos.
+        </p>
+      )}
+      {isAdmin && showManual && (
         <div className="mt-3 space-y-2 border-t border-amber-200 pt-3">
           <p className="text-[11px] text-amber-900/80">
             Verifica en el panel de Facturama si esta factura sí se timbró.
@@ -374,7 +408,9 @@ function ReconciliationCard({
             <button
               type="button"
               disabled={busy || !manualId.trim()}
-              onClick={() => call({ action: "confirm_stamped", facturama_cfdi_id: manualId.trim() })}
+              onClick={() =>
+                call({ action: "confirm_stamped", facturama_cfdi_id: manualId.trim() })
+              }
               className="shrink-0 rounded-xl bg-amber-900 px-3 py-2 text-[11px] font-semibold text-amber-50 disabled:opacity-60"
             >
               Sí se timbró

@@ -886,6 +886,14 @@ export type Database = {
         };
         Returns: boolean;
       };
+      current_user_is_admin: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
+      mark_cfdi_cancellation_error: {
+        Args: { p_invoice_id: string; p_pac_response: Json };
+        Returns: undefined;
+      };
     };
     Enums: {
       app_role: "admin" | "user";
