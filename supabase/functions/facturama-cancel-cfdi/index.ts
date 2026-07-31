@@ -133,8 +133,10 @@ Deno.serve(async (req) => {
     // (network hiccup, sandbox flakiness, timeout after they'd already
     // processed it). Check the CFDI's real status before reporting failure
     // and leaving cancellation_status stuck at NULL forever.
+    let reconciliationCheck: unknown;
     try {
       const current = await getCfdi(facturamaId);
+      reconciliationCheck = { checked: true, status: (current as Record<string, unknown>).Status };
       if (isCancelled((current as Record<string, unknown>).Status)) {
         const { error: reconcileError } = await supabase.rpc("finalize_cfdi_cancellation", {
           p_invoice_id: invoice.id,
@@ -155,14 +157,28 @@ Deno.serve(async (req) => {
             facturama_response: current,
           });
         }
+        reconciliationCheck = {
+          ...(reconciliationCheck as Record<string, unknown>),
+          finalize_error: reconcileError.message,
+        };
       }
-    } catch {
-      // Couldn't verify either — fall through and report the original error.
+    } catch (reconcileCheckError) {
+      // Couldn't verify either — fall through and report the original error,
+      // but keep a record of why the check itself failed.
+      reconciliationCheck = {
+        checked: false,
+        error: isFacturamaError(reconcileCheckError)
+          ? { message: reconcileCheckError.message, status: reconcileCheckError.status }
+          : String(reconcileCheckError),
+      };
     }
 
-    const errorPacResponse = isFacturamaError(error)
-      ? error.pacResponse
-      : { message: error instanceof Error ? error.message : String(error) };
+    const errorPacResponse = {
+      original_error: isFacturamaError(error)
+        ? error.pacResponse
+        : { message: error instanceof Error ? error.message : String(error) },
+      reconciliation_check: reconciliationCheck,
+    };
     try {
       await supabase.rpc("mark_cfdi_cancellation_error", {
         p_invoice_id: invoice.id,
