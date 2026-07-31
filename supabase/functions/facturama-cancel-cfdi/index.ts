@@ -2,7 +2,7 @@
 // Cancels an issued Multi-Issuer CFDI at Facturama before changing local state.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { cancelCfdi } from "../_shared/facturama/client.ts";
+import { cancelCfdi, getCfdi } from "../_shared/facturama/client.ts";
 import { isFacturamaError } from "../_shared/facturama/errors.ts";
 
 const cors = {
@@ -128,6 +128,66 @@ Deno.serve(async (req) => {
       facturama_response: cancellation,
     });
   } catch (error) {
+    // Ambiguous outcome: the cancel request may have been applied at
+    // Facturama's end even though the response we got back was an error
+    // (network hiccup, sandbox flakiness, timeout after they'd already
+    // processed it). Check the CFDI's real status before reporting failure
+    // and leaving cancellation_status stuck at NULL forever.
+    let reconciliationCheck: unknown;
+    try {
+      const current = await getCfdi(facturamaId);
+      reconciliationCheck = { checked: true, status: (current as Record<string, unknown>).Status };
+      if (isCancelled((current as Record<string, unknown>).Status)) {
+        const { error: reconcileError } = await supabase.rpc("finalize_cfdi_cancellation", {
+          p_invoice_id: invoice.id,
+          p_motive: payload.motive,
+          p_uuid_replacement:
+            typeof payload.uuid_replacement === "string" ? payload.uuid_replacement : null,
+          p_cancelled: true,
+          p_request_date: null,
+          p_cancelled_at: new Date().toISOString(),
+          p_pac_response: current,
+        });
+        if (!reconcileError) {
+          return json({
+            ok: true,
+            cancelled: true,
+            pending_acceptance: false,
+            message: "El CFDI ya estaba cancelado ante el PAC; se sincronizó el estado.",
+            facturama_response: current,
+          });
+        }
+        reconciliationCheck = {
+          ...(reconciliationCheck as Record<string, unknown>),
+          finalize_error: reconcileError.message,
+        };
+      }
+    } catch (reconcileCheckError) {
+      // Couldn't verify either — fall through and report the original error,
+      // but keep a record of why the check itself failed.
+      reconciliationCheck = {
+        checked: false,
+        error: isFacturamaError(reconcileCheckError)
+          ? { message: reconcileCheckError.message, status: reconcileCheckError.status }
+          : String(reconcileCheckError),
+      };
+    }
+
+    const errorPacResponse = {
+      original_error: isFacturamaError(error)
+        ? error.pacResponse
+        : { message: error instanceof Error ? error.message : String(error) },
+      reconciliation_check: reconciliationCheck,
+    };
+    try {
+      await supabase.rpc("mark_cfdi_cancellation_error", {
+        p_invoice_id: invoice.id,
+        p_pac_response: errorPacResponse,
+      });
+    } catch {
+      // Best-effort bookkeeping; never mask the original error below.
+    }
+
     if (isFacturamaError(error)) {
       return json(
         {

@@ -9,15 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TerminosRouteImport } from './routes/terminos'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as PrivacidadRouteImport } from './routes/privacidad'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
-import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authenticated/profile.index'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products.index'
 import { Route as AuthenticatedClientsIndexRouteImport } from './routes/_authenticated/clients.index'
 import { Route as AuthenticatedProfileFiscalRouteImport } from './routes/_authenticated/profile.fiscal'
@@ -29,9 +31,19 @@ import { Route as AuthenticatedClientsNewRouteImport } from './routes/_authentic
 import { Route as AuthenticatedProductsIdEditRouteImport } from './routes/_authenticated/products.$id.edit'
 import { Route as AuthenticatedClientsIdEditRouteImport } from './routes/_authenticated/clients.$id.edit'
 
+const TerminosRoute = TerminosRouteImport.update({
+  id: '/terminos',
+  path: '/terminos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacidadRoute = PrivacidadRouteImport.update({
+  id: '/privacidad',
+  path: '/privacidad',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OnboardingRoute = OnboardingRouteImport.update({
@@ -58,11 +70,6 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
   id: '/history',
   path: '/history',
@@ -73,6 +80,12 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedProfileIndexRoute =
+  AuthenticatedProfileIndexRouteImport.update({
+    id: '/profile/',
+    path: '/profile/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProductsIndexRoute =
   AuthenticatedProductsIndexRouteImport.update({
     id: '/products/',
@@ -87,14 +100,14 @@ const AuthenticatedClientsIndexRoute =
   } as any)
 const AuthenticatedProfileFiscalRoute =
   AuthenticatedProfileFiscalRouteImport.update({
-    id: '/fiscal',
-    path: '/fiscal',
-    getParentRoute: () => AuthenticatedProfileRoute,
+    id: '/profile/fiscal',
+    path: '/profile/fiscal',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedProfileCsdRoute = AuthenticatedProfileCsdRouteImport.update({
-  id: '/csd',
-  path: '/csd',
-  getParentRoute: () => AuthenticatedProfileRoute,
+  id: '/profile/csd',
+  path: '/profile/csd',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedProductsNewRoute =
   AuthenticatedProductsNewRouteImport.update({
@@ -135,10 +148,11 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
+  '/privacidad': typeof PrivacidadRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/terminos': typeof TerminosRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/history': typeof AuthenticatedHistoryRoute
-  '/profile': typeof AuthenticatedProfileRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRoute
   '/clients/new': typeof AuthenticatedClientsNewRoute
   '/invoices/$id': typeof AuthenticatedInvoicesIdRoute
@@ -148,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/profile/fiscal': typeof AuthenticatedProfileFiscalRoute
   '/clients/': typeof AuthenticatedClientsIndexRoute
   '/products/': typeof AuthenticatedProductsIndexRoute
+  '/profile/': typeof AuthenticatedProfileIndexRoute
   '/clients/$id/edit': typeof AuthenticatedClientsIdEditRoute
   '/products/$id/edit': typeof AuthenticatedProductsIdEditRoute
 }
@@ -155,10 +170,11 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
+  '/privacidad': typeof PrivacidadRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/terminos': typeof TerminosRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/history': typeof AuthenticatedHistoryRoute
-  '/profile': typeof AuthenticatedProfileRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRoute
   '/clients/new': typeof AuthenticatedClientsNewRoute
   '/invoices/$id': typeof AuthenticatedInvoicesIdRoute
@@ -168,6 +184,7 @@ export interface FileRoutesByTo {
   '/profile/fiscal': typeof AuthenticatedProfileFiscalRoute
   '/clients': typeof AuthenticatedClientsIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
+  '/profile': typeof AuthenticatedProfileIndexRoute
   '/clients/$id/edit': typeof AuthenticatedClientsIdEditRoute
   '/products/$id/edit': typeof AuthenticatedProductsIdEditRoute
 }
@@ -177,10 +194,11 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
+  '/privacidad': typeof PrivacidadRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/terminos': typeof TerminosRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
-  '/_authenticated/profile': typeof AuthenticatedProfileRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/clients/new': typeof AuthenticatedClientsNewRoute
   '/_authenticated/invoices/$id': typeof AuthenticatedInvoicesIdRoute
@@ -190,6 +208,7 @@ export interface FileRoutesById {
   '/_authenticated/profile/fiscal': typeof AuthenticatedProfileFiscalRoute
   '/_authenticated/clients/': typeof AuthenticatedClientsIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
+  '/_authenticated/profile/': typeof AuthenticatedProfileIndexRoute
   '/_authenticated/clients/$id/edit': typeof AuthenticatedClientsIdEditRoute
   '/_authenticated/products/$id/edit': typeof AuthenticatedProductsIdEditRoute
 }
@@ -199,10 +218,11 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/onboarding'
+    | '/privacidad'
     | '/reset-password'
+    | '/terminos'
     | '/dashboard'
     | '/history'
-    | '/profile'
     | '/settings'
     | '/clients/new'
     | '/invoices/$id'
@@ -212,6 +232,7 @@ export interface FileRouteTypes {
     | '/profile/fiscal'
     | '/clients/'
     | '/products/'
+    | '/profile/'
     | '/clients/$id/edit'
     | '/products/$id/edit'
   fileRoutesByTo: FileRoutesByTo
@@ -219,10 +240,11 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/onboarding'
+    | '/privacidad'
     | '/reset-password'
+    | '/terminos'
     | '/dashboard'
     | '/history'
-    | '/profile'
     | '/settings'
     | '/clients/new'
     | '/invoices/$id'
@@ -232,6 +254,7 @@ export interface FileRouteTypes {
     | '/profile/fiscal'
     | '/clients'
     | '/products'
+    | '/profile'
     | '/clients/$id/edit'
     | '/products/$id/edit'
   id:
@@ -240,10 +263,11 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/onboarding'
+    | '/privacidad'
     | '/reset-password'
+    | '/terminos'
     | '/_authenticated/dashboard'
     | '/_authenticated/history'
-    | '/_authenticated/profile'
     | '/_authenticated/settings'
     | '/_authenticated/clients/new'
     | '/_authenticated/invoices/$id'
@@ -253,6 +277,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile/fiscal'
     | '/_authenticated/clients/'
     | '/_authenticated/products/'
+    | '/_authenticated/profile/'
     | '/_authenticated/clients/$id/edit'
     | '/_authenticated/products/$id/edit'
   fileRoutesById: FileRoutesById
@@ -262,16 +287,32 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   OnboardingRoute: typeof OnboardingRoute
+  PrivacidadRoute: typeof PrivacidadRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  TerminosRoute: typeof TerminosRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terminos': {
+      id: '/terminos'
+      path: '/terminos'
+      fullPath: '/terminos'
+      preLoaderRoute: typeof TerminosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset-password': {
       id: '/reset-password'
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacidad': {
+      id: '/privacidad'
+      path: '/privacidad'
+      fullPath: '/privacidad'
+      preLoaderRoute: typeof PrivacidadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/onboarding': {
@@ -309,13 +350,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/profile': {
-      id: '/_authenticated/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof AuthenticatedProfileRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/history': {
       id: '/_authenticated/history'
       path: '/history'
@@ -328,6 +362,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/profile/': {
+      id: '/_authenticated/profile/'
+      path: '/profile'
+      fullPath: '/profile/'
+      preLoaderRoute: typeof AuthenticatedProfileIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/products/': {
@@ -346,17 +387,17 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/profile/fiscal': {
       id: '/_authenticated/profile/fiscal'
-      path: '/fiscal'
+      path: '/profile/fiscal'
       fullPath: '/profile/fiscal'
       preLoaderRoute: typeof AuthenticatedProfileFiscalRouteImport
-      parentRoute: typeof AuthenticatedProfileRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/profile/csd': {
       id: '/_authenticated/profile/csd'
-      path: '/csd'
+      path: '/profile/csd'
       fullPath: '/profile/csd'
       preLoaderRoute: typeof AuthenticatedProfileCsdRouteImport
-      parentRoute: typeof AuthenticatedProfileRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/products/new': {
       id: '/_authenticated/products/new'
@@ -403,30 +444,19 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AuthenticatedProfileRouteChildren {
-  AuthenticatedProfileCsdRoute: typeof AuthenticatedProfileCsdRoute
-  AuthenticatedProfileFiscalRoute: typeof AuthenticatedProfileFiscalRoute
-}
-
-const AuthenticatedProfileRouteChildren: AuthenticatedProfileRouteChildren = {
-  AuthenticatedProfileCsdRoute: AuthenticatedProfileCsdRoute,
-  AuthenticatedProfileFiscalRoute: AuthenticatedProfileFiscalRoute,
-}
-
-const AuthenticatedProfileRouteWithChildren =
-  AuthenticatedProfileRoute._addFileChildren(AuthenticatedProfileRouteChildren)
-
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
-  AuthenticatedProfileRoute: typeof AuthenticatedProfileRouteWithChildren
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedClientsNewRoute: typeof AuthenticatedClientsNewRoute
   AuthenticatedInvoicesIdRoute: typeof AuthenticatedInvoicesIdRoute
   AuthenticatedInvoicesNewRoute: typeof AuthenticatedInvoicesNewRoute
   AuthenticatedProductsNewRoute: typeof AuthenticatedProductsNewRoute
+  AuthenticatedProfileCsdRoute: typeof AuthenticatedProfileCsdRoute
+  AuthenticatedProfileFiscalRoute: typeof AuthenticatedProfileFiscalRoute
   AuthenticatedClientsIndexRoute: typeof AuthenticatedClientsIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
+  AuthenticatedProfileIndexRoute: typeof AuthenticatedProfileIndexRoute
   AuthenticatedClientsIdEditRoute: typeof AuthenticatedClientsIdEditRoute
   AuthenticatedProductsIdEditRoute: typeof AuthenticatedProductsIdEditRoute
 }
@@ -434,14 +464,16 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
-  AuthenticatedProfileRoute: AuthenticatedProfileRouteWithChildren,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedClientsNewRoute: AuthenticatedClientsNewRoute,
   AuthenticatedInvoicesIdRoute: AuthenticatedInvoicesIdRoute,
   AuthenticatedInvoicesNewRoute: AuthenticatedInvoicesNewRoute,
   AuthenticatedProductsNewRoute: AuthenticatedProductsNewRoute,
+  AuthenticatedProfileCsdRoute: AuthenticatedProfileCsdRoute,
+  AuthenticatedProfileFiscalRoute: AuthenticatedProfileFiscalRoute,
   AuthenticatedClientsIndexRoute: AuthenticatedClientsIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
+  AuthenticatedProfileIndexRoute: AuthenticatedProfileIndexRoute,
   AuthenticatedClientsIdEditRoute: AuthenticatedClientsIdEditRoute,
   AuthenticatedProductsIdEditRoute: AuthenticatedProductsIdEditRoute,
 }
@@ -454,7 +486,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   OnboardingRoute: OnboardingRoute,
+  PrivacidadRoute: PrivacidadRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  TerminosRoute: TerminosRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

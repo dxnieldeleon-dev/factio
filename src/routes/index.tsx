@@ -6,9 +6,17 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Factio — Factura en menos de 60 segundos" },
-      { name: "description", content: "La forma más sencilla de emitir facturas electrónicas en México. Para freelancers, profesionistas y pequeñas empresas." },
+      {
+        name: "description",
+        content:
+          "La forma más sencilla de emitir facturas electrónicas en México. Para freelancers, profesionistas y pequeñas empresas.",
+      },
       { property: "og:title", content: "Factio — Factura en menos de 60 segundos" },
-      { property: "og:description", content: "La forma más sencilla de emitir facturas electrónicas en México. Para freelancers, profesionistas y pequeñas empresas." },
+      {
+        property: "og:description",
+        content:
+          "La forma más sencilla de emitir facturas electrónicas en México. Para freelancers, profesionistas y pequeñas empresas.",
+      },
     ],
   }),
   component: Landing,
@@ -34,8 +42,8 @@ function Landing() {
             Factura en menos de <span className="text-primary">60 segundos</span>.
           </h1>
           <p className="mt-5 max-w-xl text-lg text-muted-foreground">
-            La forma más sencilla de emitir CFDI 4.0 desde tu celular. Sin formularios eternos,
-            sin tecnicismos del SAT.
+            La forma más sencilla de emitir CFDI 4.0 desde tu celular. Sin formularios eternos, sin
+            tecnicismos del SAT.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -59,11 +67,26 @@ function Landing() {
 
         <div className="mt-20 grid gap-4 sm:grid-cols-3">
           {[
-            { icon: Zap, title: "Rápido de verdad", body: "Crea, timbra y envía una factura sin salir de tu celular." },
-            { icon: ShieldCheck, title: "Evita errores fiscales", body: "Validamos RFC, régimen y uso CFDI antes de timbrar." },
-            { icon: Sparkles, title: "Diseñado para ti", body: "Interfaz sencilla, pensada para freelancers y pequeñas empresas." },
+            {
+              icon: Zap,
+              title: "Rápido de verdad",
+              body: "Crea, timbra y envía una factura sin salir de tu celular.",
+            },
+            {
+              icon: ShieldCheck,
+              title: "Evita errores fiscales",
+              body: "Validamos RFC, régimen y uso CFDI antes de timbrar.",
+            },
+            {
+              icon: Sparkles,
+              title: "Diseñado para ti",
+              body: "Interfaz sencilla, pensada para freelancers y pequeñas empresas.",
+            },
           ].map((f) => (
-            <div key={f.title} className="rounded-3xl border border-border bg-surface p-6 shadow-soft">
+            <div
+              key={f.title}
+              className="rounded-3xl border border-border bg-surface p-6 shadow-soft"
+            >
               <div className="grid size-10 place-items-center rounded-2xl bg-primary-soft text-primary">
                 <f.icon className="size-5" />
               </div>
@@ -73,6 +96,18 @@ function Landing() {
           ))}
         </div>
       </main>
+
+      <footer className="mx-auto max-w-5xl px-5 pb-10">
+        <div className="flex flex-wrap gap-4 border-t border-border pt-6 text-xs text-muted-foreground">
+          <span>&copy; {new Date().getFullYear()} Factio</span>
+          <Link to="/terminos" className="hover:text-foreground hover:underline">
+            Términos y Condiciones
+          </Link>
+          <Link to="/privacidad" className="hover:text-foreground hover:underline">
+            Aviso de Privacidad
+          </Link>
+        </div>
+      </footer>
     </div>
   );
 }
