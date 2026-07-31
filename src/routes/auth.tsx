@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Mail, Lock, ArrowRight, Loader2, ArrowLeft } from "lucide-react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
+import factioLogo from "@/assets/factio-logo.png.asset.json";
 
 const authSearchSchema = z.object({
   mode: z.enum(["signin", "signup", "forgot"]).optional(),
@@ -162,9 +163,7 @@ function AuthPage() {
     <div className="app-shell flex min-h-dvh flex-col justify-center px-6 py-10">
       <div className="animate-reveal">
         <div className="flex items-center gap-2">
-          <div className="grid size-9 place-items-center rounded-xl bg-foreground text-background font-bold">
-            F
-          </div>
+          <img src={factioLogo.url} alt="Factio" className="size-9 rounded-lg" />
           <span className="font-semibold tracking-tight">Factio</span>
         </div>
         <h1 className="mt-8 text-3xl font-bold tracking-tight">
