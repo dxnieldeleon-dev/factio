@@ -686,6 +686,7 @@ function StepItems({
                 min="0"
                 value={it.quantity}
                 onChange={(e) => update(idx, { quantity: Number(e.target.value) })}
+                onFocus={(e) => e.target.select()}
                 className="ff-mini"
               />
             </Mini>
@@ -696,6 +697,7 @@ function StepItems({
                 min="0"
                 value={it.unit_price}
                 onChange={(e) => update(idx, { unit_price: Number(e.target.value) })}
+                onFocus={(e) => e.target.select()}
                 className="ff-mini"
               />
             </Mini>
@@ -706,6 +708,7 @@ function StepItems({
                 min="0"
                 value={it.discount}
                 onChange={(e) => update(idx, { discount: Number(e.target.value) })}
+                onFocus={(e) => e.target.select()}
                 className="ff-mini"
               />
             </Mini>
@@ -1110,6 +1113,7 @@ function StepReview(props: StepReviewProps) {
                   step="0.0001"
                   value={exchangeRate}
                   onChange={(e) => setExchangeRate(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
                   className="ff-mini font-mono"
                 />
               </Mini>

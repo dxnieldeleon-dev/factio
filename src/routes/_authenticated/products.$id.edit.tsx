@@ -181,6 +181,7 @@ function EditProduct() {
                 className="ff-input pl-7 font-mono"
                 value={form.unit_price}
                 onChange={(e) => set("unit_price", Number(e.target.value))}
+                onFocus={(e) => e.target.select()}
               />
             </div>
           </Field>
