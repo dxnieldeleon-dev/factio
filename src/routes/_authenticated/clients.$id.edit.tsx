@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute("/_authenticated/clients/$id/edit")({
   component: EditClient,
@@ -33,12 +34,15 @@ type ClientRow = {
   phone: string | null;
   is_favorite: boolean;
   notes: string | null;
+  is_technology_platform: boolean;
 };
 
 async function loadClient(id: string): Promise<ClientRow> {
   const { data, error } = await supabase
     .from("clients")
-    .select("id, rfc, legal_name, tax_regime, postal_code, cfdi_use, email, phone, is_favorite, notes")
+    .select(
+      "id, rfc, legal_name, tax_regime, postal_code, cfdi_use, email, phone, is_favorite, notes, is_technology_platform",
+    )
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -50,7 +54,10 @@ function EditClient() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { data, isLoading, error } = useQuery({ queryKey: ["clients", id], queryFn: () => loadClient(id) });
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["clients", id],
+    queryFn: () => loadClient(id),
+  });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState<ClientRow | null>(null);
@@ -67,8 +74,14 @@ function EditClient() {
     e.preventDefault();
     if (!form) return;
     const rfcCheck = validateRFC(form.rfc);
-    if (!rfcCheck.valid) { toast.error(rfcCheck.reason!); return; }
-    if (!form.legal_name.trim()) { toast.error("La razón social es requerida"); return; }
+    if (!rfcCheck.valid) {
+      toast.error(rfcCheck.reason!);
+      return;
+    }
+    if (!form.legal_name.trim()) {
+      toast.error("La razón social es requerida");
+      return;
+    }
     setSaving(true);
     try {
       const { error } = await supabase
@@ -83,6 +96,7 @@ function EditClient() {
           phone: form.phone?.trim() || null,
           is_favorite: form.is_favorite,
           notes: form.notes?.trim() || null,
+          is_technology_platform: form.is_technology_platform,
         })
         .eq("id", id);
       if (error) throw error;
@@ -120,7 +134,9 @@ function EditClient() {
       <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
         <div className="h-10 w-32 animate-pulse rounded-full bg-muted" />
         <div className="mt-6 space-y-3">
-          {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-14 animate-pulse rounded-2xl bg-muted" />)}
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-14 animate-pulse rounded-2xl bg-muted" />
+          ))}
         </div>
       </div>
     );
@@ -130,7 +146,9 @@ function EditClient() {
     return (
       <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
         <p className="text-sm text-destructive">{(error as Error).message}</p>
-        <Link to="/clients" className="mt-4 inline-block text-sm underline">Volver</Link>
+        <Link to="/clients" className="mt-4 inline-block text-sm underline">
+          Volver
+        </Link>
       </div>
     );
   }
@@ -139,7 +157,10 @@ function EditClient() {
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
       <header className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <Link to="/clients" className="grid size-10 place-items-center rounded-full border border-border bg-surface">
+          <Link
+            to="/clients"
+            className="grid size-10 place-items-center rounded-full border border-border bg-surface"
+          >
             <ArrowLeft className="size-4" />
           </Link>
           <h1 className="truncate text-xl font-bold tracking-tight">Editar cliente</h1>
@@ -150,7 +171,9 @@ function EditClient() {
           className="grid size-10 place-items-center rounded-full border border-border bg-surface"
           aria-label="Favorito"
         >
-          <Star className={`size-4 ${form.is_favorite ? "fill-warning text-warning" : "text-muted-foreground"}`} />
+          <Star
+            className={`size-4 ${form.is_favorite ? "fill-warning text-warning" : "text-muted-foreground"}`}
+          />
         </button>
       </header>
 
@@ -167,29 +190,77 @@ function EditClient() {
           />
         </Field>
         <Field label="Razón social">
-          <input value={form.legal_name} onChange={(e) => set("legal_name", e.target.value)} className="ff-input" required />
+          <input
+            value={form.legal_name}
+            onChange={(e) => set("legal_name", e.target.value)}
+            className="ff-input"
+            required
+          />
         </Field>
         <Field label="Régimen fiscal">
-          <select value={form.tax_regime ?? ""} onChange={(e) => set("tax_regime", e.target.value)} className="ff-input">
-            {TAX_REGIMES.map((r) => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+          <select
+            value={form.tax_regime ?? ""}
+            onChange={(e) => set("tax_regime", e.target.value)}
+            className="ff-input"
+          >
+            {TAX_REGIMES.map((r) => (
+              <option key={r.code} value={r.code}>
+                {r.code} — {r.name}
+              </option>
+            ))}
           </select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Código postal">
-            <input value={form.postal_code ?? ""} onChange={(e) => set("postal_code", e.target.value)} maxLength={5} className="ff-input font-mono" />
+            <input
+              value={form.postal_code ?? ""}
+              onChange={(e) => set("postal_code", e.target.value)}
+              maxLength={5}
+              className="ff-input font-mono"
+            />
           </Field>
           <Field label="Uso CFDI">
-            <select value={form.cfdi_use ?? ""} onChange={(e) => set("cfdi_use", e.target.value)} className="ff-input">
-              {CFDI_USES.map((u) => <option key={u.code} value={u.code}>{u.code} — {u.name}</option>)}
+            <select
+              value={form.cfdi_use ?? ""}
+              onChange={(e) => set("cfdi_use", e.target.value)}
+              className="ff-input"
+            >
+              {CFDI_USES.map((u) => (
+                <option key={u.code} value={u.code}>
+                  {u.code} — {u.name}
+                </option>
+              ))}
             </select>
           </Field>
         </div>
         <Field label="Correo">
-          <input type="email" value={form.email ?? ""} onChange={(e) => set("email", e.target.value)} placeholder="cliente@correo.com" className="ff-input" />
+          <input
+            type="email"
+            value={form.email ?? ""}
+            onChange={(e) => set("email", e.target.value)}
+            placeholder="cliente@correo.com"
+            className="ff-input"
+          />
         </Field>
         <Field label="Teléfono">
-          <input type="tel" value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} placeholder="55 0000 0000" className="ff-input" />
+          <input
+            type="tel"
+            value={form.phone ?? ""}
+            onChange={(e) => set("phone", e.target.value)}
+            placeholder="55 0000 0000"
+            className="ff-input"
+          />
         </Field>
+
+        <label className="flex items-center justify-between gap-3 py-1">
+          <span className="text-xs text-muted-foreground">
+            Es una plataforma tecnológica (Uber, Didi, Airbnb, etc.)
+          </span>
+          <Switch
+            checked={form.is_technology_platform}
+            onCheckedChange={(v) => set("is_technology_platform", v)}
+          />
+        </label>
 
         <button
           type="submit"
@@ -206,19 +277,29 @@ function EditClient() {
               disabled={deleting}
               className="flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/5 py-3.5 text-sm font-semibold text-destructive transition active:scale-[0.98] disabled:opacity-60"
             >
-              {deleting ? <Loader2 className="size-4 animate-spin" /> : <><Trash2 className="size-4" /> Eliminar cliente</>}
+              {deleting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <>
+                  <Trash2 className="size-4" /> Eliminar cliente
+                </>
+              )}
             </button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>¿Eliminar este cliente?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acción no se puede deshacer. Si el cliente tiene facturas emitidas, no podrá eliminarse.
+                Esta acción no se puede deshacer. Si el cliente tiene facturas emitidas, no podrá
+                eliminarse.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={onDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              <AlertDialogAction
+                onClick={onDelete}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
                 Eliminar
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -234,7 +315,9 @@ function EditClient() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
       {children}
     </label>
   );

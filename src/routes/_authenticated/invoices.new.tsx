@@ -42,6 +42,7 @@ import {
   type FieldErrors,
   type ReceiverProfile,
 } from "@/lib/fiscal";
+import { resolveTaxTreatment } from "@/lib/tax-withholding";
 
 export const Route = createFileRoute("/_authenticated/invoices/new")({
   component: NewInvoice,
@@ -56,6 +57,7 @@ interface ClientRow {
   cfdi_use: string | null;
   email: string | null;
   phone: string | null;
+  is_technology_platform: boolean;
 }
 interface ProductRow {
   id: string;
@@ -82,6 +84,17 @@ type Step = 1 | 2 | 3 | 4;
 // /clients/new or /products/new, so creating one mid-flow doesn't force
 // restarting the invoice from scratch.
 const DRAFT_KEY = "factio.invoiceDraft.v1";
+
+// Mirrors toMoney in supabase/functions/facturama-create-cfdi/index.ts —
+// the server recomputes totals per item and rejects a mismatch, so the
+// preview has to round the same way to avoid a false 409 on submit.
+function toMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function formatPct(pct: number | undefined): string {
+  return `${(pct ?? 0).toLocaleString("es-MX", { maximumFractionDigits: 4 })}%`;
+}
 
 type InvoiceDraft = {
   client: ClientRow;
@@ -153,21 +166,51 @@ function NewInvoice() {
       if (!u.user) return null;
       const { data } = await supabase
         .from("companies")
-        .select("*")
+        .select("*, activity_profiles(activity_category)")
         .eq("user_id", u.user.id)
         .maybeSingle();
       return data;
     },
   });
 
+  // Solo una vista previa: la Edge Function recalcula esto desde cero y es
+  // la única fuente de verdad para lo que realmente se timbra.
+  const { data: taxTreatment } = useQuery({
+    queryKey: [
+      "tax-treatment",
+      issuer?.tax_regime,
+      issuer?.activity_profiles?.activity_category,
+      receiver?.rfc,
+      client?.is_technology_platform,
+    ],
+    queryFn: () =>
+      resolveTaxTreatment({
+        taxRegime: issuer?.tax_regime ?? null,
+        activityCategory: issuer?.activity_profiles?.activity_category ?? null,
+        rfc: receiver!.rfc,
+        isTechnologyPlatform: client?.is_technology_platform ?? false,
+      }),
+    enabled: !!receiver?.rfc,
+  });
+
   const totals = useMemo(() => {
-    const subtotal = items.reduce((a, i) => a + (i.quantity * i.unit_price - i.discount), 0);
-    const ivaTotal = items.reduce(
-      (a, i) => a + (i.quantity * i.unit_price - i.discount) * i.iva_rate,
-      0,
-    );
-    return { subtotal, ivaTotal, total: subtotal + ivaTotal };
-  }, [items]);
+    const isrPct = taxTreatment?.isrRetencionPct ?? 0;
+    const ivaRetPct = taxTreatment?.ivaRetencionPct ?? 0;
+    let subtotal = 0;
+    let ivaTotal = 0;
+    let isrRetencionTotal = 0;
+    let ivaRetencionTotal = 0;
+    for (const i of items) {
+      const lineSubtotal = toMoney(i.quantity * i.unit_price - i.discount);
+      subtotal = toMoney(subtotal + lineSubtotal);
+      ivaTotal = toMoney(ivaTotal + toMoney(lineSubtotal * i.iva_rate));
+      isrRetencionTotal = toMoney(isrRetencionTotal + toMoney(lineSubtotal * (isrPct / 100)));
+      ivaRetencionTotal = toMoney(ivaRetencionTotal + toMoney(lineSubtotal * (ivaRetPct / 100)));
+    }
+    const retentionsTotal = toMoney(isrRetencionTotal + ivaRetencionTotal);
+    const total = toMoney(subtotal + ivaTotal - retentionsTotal);
+    return { subtotal, ivaTotal, isrRetencionTotal, ivaRetencionTotal, retentionsTotal, total };
+  }, [items, taxTreatment]);
 
   const receiverErrors: FieldErrors = useMemo(() => {
     if (!receiver) return {};
@@ -202,7 +245,9 @@ function NewInvoice() {
       if (resumeClientId) {
         const { data } = await supabase
           .from("clients")
-          .select("id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email, phone")
+          .select(
+            "id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email, phone, is_technology_platform",
+          )
           .eq("id", resumeClientId)
           .maybeSingle();
         if (data) {
@@ -323,6 +368,9 @@ function NewInvoice() {
           exchange_rate: currency === "MXN" ? 1 : exchangeRate,
           subtotal: totals.subtotal,
           iva_total: totals.ivaTotal,
+          isr_retencion_total: totals.isrRetencionTotal,
+          iva_retencion_total: totals.ivaRetencionTotal,
+          retentions_total: totals.retentionsTotal,
           total: totals.total,
           notes: `cfdi_type=${cfdiType};export=${exportCode}`,
         })
@@ -330,21 +378,30 @@ function NewInvoice() {
         .single();
       if (invoiceError) throw invoiceError;
 
-      const itemRows = items.map((i, idx) => ({
-        invoice_id: invoice.id,
-        user_id: u.user.id,
-        product_id: i.product_id ?? null,
-        sat_key: i.sat_key,
-        sat_unit: i.sat_unit,
-        description: i.description,
-        quantity: i.quantity,
-        unit_price: i.unit_price,
-        discount: i.discount,
-        iva_rate: i.iva_rate,
-        iva_amount: (i.quantity * i.unit_price - i.discount) * i.iva_rate,
-        amount: i.quantity * i.unit_price - i.discount,
-        position: idx,
-      }));
+      const isrPct = taxTreatment?.isrRetencionPct ?? 0;
+      const ivaRetPct = taxTreatment?.ivaRetencionPct ?? 0;
+      const itemRows = items.map((i, idx) => {
+        const lineSubtotal = toMoney(i.quantity * i.unit_price - i.discount);
+        return {
+          invoice_id: invoice.id,
+          user_id: u.user.id,
+          product_id: i.product_id ?? null,
+          sat_key: i.sat_key,
+          sat_unit: i.sat_unit,
+          description: i.description,
+          quantity: i.quantity,
+          unit_price: i.unit_price,
+          discount: i.discount,
+          iva_rate: i.iva_rate,
+          iva_amount: (i.quantity * i.unit_price - i.discount) * i.iva_rate,
+          isr_retencion_rate: isrPct / 100,
+          isr_retencion_amount: toMoney(lineSubtotal * (isrPct / 100)),
+          iva_retencion_rate: ivaRetPct / 100,
+          iva_retencion_amount: toMoney(lineSubtotal * (ivaRetPct / 100)),
+          amount: i.quantity * i.unit_price - i.discount,
+          position: idx,
+        };
+      });
 
       const { error: itemsError } = await supabase.from("invoice_items").insert(itemRows);
       if (itemsError) {
@@ -488,6 +545,7 @@ function NewInvoice() {
             setSaveReceiverEdits={setSaveReceiverEdits}
             items={items}
             totals={totals}
+            taxTreatment={taxTreatment}
             cfdiType={cfdiType}
             setCfdiType={setCfdiType}
             paymentMethod={paymentMethod}
@@ -521,7 +579,9 @@ function StepClient({ onPick }: { onPick: (c: ClientRow) => void }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email, phone")
+        .select(
+          "id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email, phone, is_technology_platform",
+        )
         .order("is_favorite", { ascending: false })
         .order("legal_name");
       if (error) throw error;
@@ -868,7 +928,15 @@ type StepReviewProps = {
   saveReceiverEdits: boolean;
   setSaveReceiverEdits: (v: boolean) => void;
   items: LineItem[];
-  totals: { subtotal: number; ivaTotal: number; total: number };
+  totals: {
+    subtotal: number;
+    ivaTotal: number;
+    isrRetencionTotal: number;
+    ivaRetencionTotal: number;
+    retentionsTotal: number;
+    total: number;
+  };
+  taxTreatment: { isrRetencionPct: number; ivaRetencionPct: number } | null | undefined;
   cfdiType: string;
   setCfdiType: (v: string) => void;
   paymentMethod: string;
@@ -897,6 +965,7 @@ function StepReview(props: StepReviewProps) {
     setSaveReceiverEdits,
     items,
     totals,
+    taxTreatment,
     cfdiType,
     setCfdiType,
     paymentMethod,
@@ -1177,8 +1246,27 @@ function StepReview(props: StepReviewProps) {
         <div className="mt-3 space-y-1.5 border-t border-border pt-3 text-sm">
           <Row label="Subtotal" value={formatMXN(totals.subtotal)} />
           <Row label="IVA" value={formatMXN(totals.ivaTotal)} />
+          {totals.isrRetencionTotal > 0 && (
+            <Row
+              label={`Retención ISR (${formatPct(taxTreatment?.isrRetencionPct)})`}
+              value={`-${formatMXN(totals.isrRetencionTotal)}`}
+            />
+          )}
+          {totals.ivaRetencionTotal > 0 && (
+            <Row
+              label={`Retención IVA (${formatPct(taxTreatment?.ivaRetencionPct)})`}
+              value={`-${formatMXN(totals.ivaRetencionTotal)}`}
+            />
+          )}
           <Row label="Total" value={formatMXN(totals.total)} bold />
         </div>
+        {totals.retentionsTotal > 0 && (
+          <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <AlertCircle className="mt-0.5 size-3 shrink-0" />
+            Tu cliente retiene estos montos por ley al pagarte; se restan del total que cobras, pero
+            es dinero que tu cliente entera al SAT a tu nombre.
+          </p>
+        )}
       </div>
 
       {(receiverBlocking || paymentError) && (
