@@ -31,6 +31,8 @@ type Product = {
   unit_price: number;
   iva_rate: number;
   tax_object: "01" | "02";
+  isr_retencion_rate: number | null;
+  iva_retencion_rate: number | null;
   internal_code: string | null;
   category: string | null;
   image_url: string | null;
@@ -40,7 +42,7 @@ async function loadProduct(id: string): Promise<Product> {
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object, internal_code, category, image_url",
+      "id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object, isr_retencion_rate, iva_retencion_rate, internal_code, category, image_url",
     )
     .eq("id", id)
     .maybeSingle();
@@ -62,9 +64,13 @@ function EditProduct() {
   const [deleting, setDeleting] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [hasRetention, setHasRetention] = useState(false);
 
   useEffect(() => {
-    if (data) setForm(data);
+    if (data) {
+      setForm(data);
+      setHasRetention(data.isr_retencion_rate !== null || data.iva_retencion_rate !== null);
+    }
   }, [data]);
   function set<K extends keyof Product>(key: K, value: Product[K]) {
     setForm((current) => (current ? { ...current, [key]: value } : current));
@@ -74,6 +80,17 @@ function EditProduct() {
     set("tax_object", next);
     if (next === "01") set("iva_rate", 0);
     else if (form?.iva_rate === 0) set("iva_rate", 0.16);
+  }
+
+  function onHasRetentionChange(next: boolean) {
+    setHasRetention(next);
+    if (!next) {
+      set("isr_retencion_rate", null);
+      set("iva_retencion_rate", null);
+    } else {
+      set("isr_retencion_rate", form?.isr_retencion_rate ?? 0);
+      set("iva_retencion_rate", form?.iva_retencion_rate ?? 0);
+    }
   }
 
   function onImageChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -117,6 +134,8 @@ function EditProduct() {
           unit_price: form.unit_price,
           iva_rate: form.iva_rate,
           tax_object: form.tax_object,
+          isr_retencion_rate: hasRetention ? form.isr_retencion_rate : null,
+          iva_retencion_rate: hasRetention ? form.iva_retencion_rate : null,
           internal_code: form.internal_code?.trim() || null,
           category: form.category?.trim() || null,
           image_url: imageUrl,
@@ -281,6 +300,55 @@ function EditProduct() {
           <p className="rounded-2xl bg-muted/60 px-4 py-3 text-xs text-muted-foreground">
             Este producto o servicio no llevará IVA al facturarlo.
           </p>
+        )}
+        <Field
+          label="¿Tiene impuestos retenidos?"
+          hint="Normalmente esto se calcula solo al facturar, según tu régimen y el tipo de cliente. Actívalo solo si quieres forzar una tasa fija para este producto."
+        >
+          <div className="flex gap-2 rounded-2xl bg-muted p-1">
+            <button
+              type="button"
+              onClick={() => onHasRetentionChange(false)}
+              className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${!hasRetention ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+            >
+              No (automático)
+            </button>
+            <button
+              type="button"
+              onClick={() => onHasRetentionChange(true)}
+              className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${hasRetention ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+            >
+              Sí, fijar tasa
+            </button>
+          </div>
+        </Field>
+        {hasRetention && (
+          <>
+            <Field label="Retención de ISR">
+              <select
+                className="ff-input"
+                value={form.isr_retencion_rate ?? 0}
+                onChange={(e) => set("isr_retencion_rate", Number(e.target.value))}
+              >
+                <option value={0}>0% (sin retención)</option>
+                <option value={0.0125}>1.25% (RESICO 626 → persona moral)</option>
+                <option value={0.1}>10% (Actividad Empresarial 612 → persona moral)</option>
+              </select>
+            </Field>
+            <Field
+              label="Retención de IVA"
+              hint="Esta tasa fija solo se aplicará al facturar a personas morales; a personas físicas nunca se retiene."
+            >
+              <select
+                className="ff-input"
+                value={form.iva_retencion_rate ?? 0}
+                onChange={(e) => set("iva_retencion_rate", Number(e.target.value))}
+              >
+                <option value={0}>0% (sin retención)</option>
+                <option value={0.106667}>10.6667% (persona moral, 612 o 626)</option>
+              </select>
+            </Field>
+          </>
         )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Código interno" hint="Para tu propio catálogo; no aparece en la factura.">

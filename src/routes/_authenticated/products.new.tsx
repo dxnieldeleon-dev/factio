@@ -40,6 +40,16 @@ function NewProduct() {
     if (next === "01") set("iva_rate", "0");
     else if (form.iva_rate === "0") set("iva_rate", "0.16");
   }
+
+  // Override manual del motor automático de retenciones (que calcula por
+  // régimen del emisor + tipo de cliente al facturar). Sin marcar, el
+  // producto no fuerza nada y se sigue calculando como hoy; si se marca,
+  // esta tasa manda para este producto — pero solo cuando el receptor sea
+  // persona moral, nunca a persona física (eso lo aplica el servidor).
+  const [hasRetention, setHasRetention] = useState(false);
+  const [isrRetencionRate, setIsrRetencionRate] = useState("0");
+  const [ivaRetencionRate, setIvaRetencionRate] = useState("0");
+
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
@@ -151,6 +161,8 @@ function NewProduct() {
           unit_price: price,
           iva_rate: parseFloat(form.iva_rate),
           tax_object: taxObject,
+          isr_retencion_rate: hasRetention ? parseFloat(isrRetencionRate) : null,
+          iva_retencion_rate: hasRetention ? parseFloat(ivaRetencionRate) : null,
           internal_code: form.internal_code.trim() || null,
           category: form.category.trim() || null,
         })
@@ -300,6 +312,14 @@ function NewProduct() {
               ivaRate={form.iva_rate}
               onIvaRateChange={(v) => set("iva_rate", v)}
             />
+            <RetentionFields
+              hasRetention={hasRetention}
+              onHasRetentionChange={setHasRetention}
+              isrRetencionRate={isrRetencionRate}
+              onIsrRetencionRateChange={setIsrRetencionRate}
+              ivaRetencionRate={ivaRetencionRate}
+              onIvaRetencionRateChange={setIvaRetencionRate}
+            />
           </>
         )}
 
@@ -364,6 +384,14 @@ function NewProduct() {
               onTaxObjectChange={onTaxObjectChange}
               ivaRate={form.iva_rate}
               onIvaRateChange={(v) => set("iva_rate", v)}
+            />
+            <RetentionFields
+              hasRetention={hasRetention}
+              onHasRetentionChange={setHasRetention}
+              isrRetencionRate={isrRetencionRate}
+              onIsrRetencionRateChange={setIsrRetencionRate}
+              ivaRetencionRate={ivaRetencionRate}
+              onIvaRetencionRateChange={setIvaRetencionRate}
             />
             <div className="grid grid-cols-2 gap-3">
               <Field
@@ -479,6 +507,93 @@ function TaxObjectFields({
         <p className="rounded-2xl bg-muted/60 px-4 py-3 text-xs text-muted-foreground">
           Este producto o servicio no llevará IVA al facturarlo.
         </p>
+      )}
+    </>
+  );
+}
+
+// Tasas confirmadas para 2026 (ver supabase/migrations/20260731020000_tax_withholding_rules.sql),
+// las mismas que usa el diálogo "Editar impuestos" de una factura en borrador.
+const ISR_RETENCION_OPTIONS = [
+  { value: "0", label: "0% (sin retención)" },
+  { value: "0.0125", label: "1.25% (RESICO 626 → persona moral)" },
+  { value: "0.10", label: "10% (Actividad Empresarial 612 → persona moral)" },
+];
+const IVA_RETENCION_OPTIONS = [
+  { value: "0", label: "0% (sin retención)" },
+  { value: "0.106667", label: "10.6667% (persona moral, 612 o 626)" },
+];
+
+function RetentionFields({
+  hasRetention,
+  onHasRetentionChange,
+  isrRetencionRate,
+  onIsrRetencionRateChange,
+  ivaRetencionRate,
+  onIvaRetencionRateChange,
+}: {
+  hasRetention: boolean;
+  onHasRetentionChange: (next: boolean) => void;
+  isrRetencionRate: string;
+  onIsrRetencionRateChange: (next: string) => void;
+  ivaRetencionRate: string;
+  onIvaRetencionRateChange: (next: string) => void;
+}) {
+  return (
+    <>
+      <Field
+        label="¿Tiene impuestos retenidos?"
+        hint="Normalmente esto se calcula solo al facturar, según tu régimen y el tipo de cliente. Actívalo solo si quieres forzar una tasa fija para este producto."
+      >
+        <div className="flex gap-2 rounded-2xl bg-muted p-1">
+          <button
+            type="button"
+            onClick={() => onHasRetentionChange(false)}
+            className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${!hasRetention ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+          >
+            No (automático)
+          </button>
+          <button
+            type="button"
+            onClick={() => onHasRetentionChange(true)}
+            className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${hasRetention ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+          >
+            Sí, fijar tasa
+          </button>
+        </div>
+      </Field>
+      {hasRetention && (
+        <>
+          <Field label="Retención de ISR">
+            <select
+              value={isrRetencionRate}
+              onChange={(e) => onIsrRetencionRateChange(e.target.value)}
+              className="ff-input"
+            >
+              {ISR_RETENCION_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="Retención de IVA"
+            hint="Esta tasa fija solo se aplicará al facturar a personas morales; a personas físicas nunca se retiene."
+          >
+            <select
+              value={ivaRetencionRate}
+              onChange={(e) => onIvaRetencionRateChange(e.target.value)}
+              className="ff-input"
+            >
+              {IVA_RETENCION_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </>
       )}
     </>
   );

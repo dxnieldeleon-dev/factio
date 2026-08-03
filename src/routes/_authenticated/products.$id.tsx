@@ -34,6 +34,8 @@ type ProductDetailRow = {
   unit_price: number;
   iva_rate: number;
   tax_object: string;
+  isr_retencion_rate: number | null;
+  iva_retencion_rate: number | null;
   internal_code: string | null;
   category: string | null;
   image_url: string | null;
@@ -45,7 +47,7 @@ async function loadProduct(id: string): Promise<ProductDetailRow> {
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object, internal_code, category, image_url, created_at, updated_at",
+      "id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object, isr_retencion_rate, iva_retencion_rate, internal_code, category, image_url, created_at, updated_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -183,6 +185,15 @@ function ProductDetail() {
             <div className="col-span-2">
               <dt className="text-xs text-muted-foreground">Código interno</dt>
               <dd className="font-mono font-medium">{data.internal_code}</dd>
+            </div>
+          )}
+          {(data.isr_retencion_rate !== null || data.iva_retencion_rate !== null) && (
+            <div className="col-span-2">
+              <dt className="text-xs text-muted-foreground">Retención fija (persona moral)</dt>
+              <dd className="font-medium">
+                ISR {Math.round((data.isr_retencion_rate ?? 0) * 10000) / 100}% · IVA{" "}
+                {Math.round((data.iva_retencion_rate ?? 0) * 10000) / 100}%
+              </dd>
             </div>
           )}
         </dl>
