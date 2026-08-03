@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Bell, Moon, Fingerprint, KeyRound } from "lucide-react";
+import { ArrowLeft, Bell, Moon, Fingerprint, KeyRound, ChevronRight, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -88,6 +88,25 @@ function SettingsPage() {
           disabled
           comingSoon
         />
+      </section>
+
+      <section className="mt-8 space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Ayuda
+        </h2>
+        <a
+          href="mailto:soporte@factio.mx"
+          className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 transition active:scale-[0.99]"
+        >
+          <div className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary">
+            <Mail className="size-4" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold">Soporte</p>
+            <p className="text-xs text-muted-foreground">soporte@factio.mx</p>
+          </div>
+          <ChevronRight className="size-4 text-muted-foreground/70" />
+        </a>
       </section>
     </div>
   );
