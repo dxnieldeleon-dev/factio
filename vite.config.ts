@@ -5,6 +5,7 @@
 //     error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 
 export default defineConfig({
   tanstackStart: {
@@ -12,4 +13,7 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Sourcemap upload activates automatically only when SENTRY_ORG/SENTRY_PROJECT/
+  // SENTRY_AUTH_TOKEN env vars are set; harmless no-op otherwise.
+  plugins: [sentryTanstackStart()],
 });
