@@ -1,7 +1,10 @@
 import "./lib/error-capture";
 
+import * as Sentry from "@sentry/cloudflare";
+
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -30,14 +33,16 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
     return response;
   }
 
-  console.error(consumeLastCapturedError() ?? new Error(`h3 swallowed SSR error: ${body}`));
+  const swallowed = consumeLastCapturedError() ?? new Error(`h3 swallowed SSR error: ${body}`);
+  console.error(swallowed);
+  Sentry.captureException(swallowed);
   return new Response(renderErrorPage(), {
     status: 500,
     headers: { "content-type": "text/html; charset=utf-8" },
   });
 }
 
-export default {
+const handlerObject = {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const handler = await getServerEntry();
@@ -45,6 +50,7 @@ export default {
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);
+      Sentry.captureException(error);
       return new Response(renderErrorPage(), {
         status: 500,
         headers: { "content-type": "text/html; charset=utf-8" },
@@ -52,3 +58,19 @@ export default {
     }
   },
 };
+
+// Sentry (server/worker runtime): error monitoring + tracing.
+// The DSN comes from the SENTRY_DSN environment variable — never hardcode it.
+// Session Replay and Logging are intentionally NOT enabled.
+export default Sentry.withSentry(
+  (env: Record<string, string | undefined> | undefined) => ({
+    dsn: env?.["SENTRY_DSN"] ?? process.env["SENTRY_DSN"] ?? "",
+    environment: process.env["NODE_ENV"] ?? "development",
+    // 1.0 captures every transaction — fine for development.
+    // TODO: lower to ~0.1–0.2 in production to control quota/volume.
+    tracesSampleRate: 1.0,
+    sendDefaultPii: false,
+  }),
+  handlerObject as never,
+) as typeof handlerObject;
+
