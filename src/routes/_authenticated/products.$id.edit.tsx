@@ -1,11 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Trash2, Upload, Package } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { COMMON_SAT_KEYS, COMMON_SAT_UNITS } from "@/lib/sat-catalogs";
 import { SatKeyPicker } from "@/components/sat-key-picker";
+import { isValidProductImage, uploadProductImage } from "@/lib/product-images";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,12 +32,15 @@ type Product = {
   iva_rate: number;
   internal_code: string | null;
   category: string | null;
+  image_url: string | null;
 };
 
 async function loadProduct(id: string): Promise<Product> {
   const { data, error } = await supabase
     .from("products")
-    .select("id, description, sat_key, sat_unit, unit_price, iva_rate, internal_code, category")
+    .select(
+      "id, description, sat_key, sat_unit, unit_price, iva_rate, internal_code, category, image_url",
+    )
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -55,12 +59,26 @@ function EditProduct() {
   const [form, setForm] = useState<Product | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (data) setForm(data);
   }, [data]);
   function set<K extends keyof Product>(key: K, value: Product[K]) {
     setForm((current) => (current ? { ...current, [key]: value } : current));
+  }
+
+  function onImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const problem = isValidProductImage(f);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+    setImageFile(f);
+    setImagePreview(URL.createObjectURL(f));
   }
 
   async function save(event: React.FormEvent) {
@@ -71,6 +89,18 @@ function EditProduct() {
       return toast.error("Precio inválido");
     setSaving(true);
     try {
+      let imageUrl = form.image_url;
+      if (imageFile) {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          try {
+            imageUrl = await uploadProductImage(userData.user.id, id, imageFile);
+          } catch (imgErr) {
+            console.error("[products.edit] image upload failed", imgErr);
+            toast.warning("No pudimos subir la foto, se guardará el resto de los cambios.");
+          }
+        }
+      }
       const { error: updateError } = await supabase
         .from("products")
         .update({
@@ -81,6 +111,7 @@ function EditProduct() {
           iva_rate: form.iva_rate,
           internal_code: form.internal_code?.trim() || null,
           category: form.category?.trim() || null,
+          image_url: imageUrl,
         })
         .eq("id", id);
       if (updateError) throw updateError;
@@ -134,6 +165,24 @@ function EditProduct() {
         <h1 className="text-xl font-bold">Editar producto</h1>
       </header>
       <form onSubmit={save} className="mt-6 space-y-4">
+        <label className="flex items-center gap-3">
+          <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-input bg-muted">
+            {imagePreview || form.image_url ? (
+              <img
+                src={imagePreview ?? form.image_url ?? undefined}
+                alt="Vista previa"
+                className="size-full object-cover"
+              />
+            ) : (
+              <Package className="size-6 text-muted-foreground" />
+            )}
+          </div>
+          <span className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-4 py-2 text-xs font-medium hover:bg-accent">
+            <Upload className="size-4" />
+            {form.image_url || imageFile ? "Cambiar foto" : "Agregar foto (opcional)"}
+            <input type="file" accept="image/*" className="hidden" onChange={onImageChange} />
+          </span>
+        </label>
         <Field label="Descripción">
           <input
             className="ff-input"

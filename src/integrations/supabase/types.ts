@@ -637,6 +637,7 @@ export type Database = {
           created_at: string;
           description: string;
           id: string;
+          image_url: string | null;
           internal_code: string | null;
           is_active: boolean;
           iva_rate: number;
@@ -652,6 +653,7 @@ export type Database = {
           created_at?: string;
           description: string;
           id?: string;
+          image_url?: string | null;
           internal_code?: string | null;
           is_active?: boolean;
           iva_rate?: number;
@@ -667,6 +669,7 @@ export type Database = {
           created_at?: string;
           description?: string;
           id?: string;
+          image_url?: string | null;
           internal_code?: string | null;
           is_active?: boolean;
           iva_rate?: number;
