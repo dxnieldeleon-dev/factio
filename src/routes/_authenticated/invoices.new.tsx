@@ -67,6 +67,8 @@ interface ProductRow {
   unit_price: number;
   iva_rate: number;
   tax_object: string;
+  isr_retencion_rate: number | null;
+  iva_retencion_rate: number | null;
 }
 interface LineItem {
   sat_key: string;
@@ -77,6 +79,12 @@ interface LineItem {
   discount: number;
   iva_rate: number;
   tax_object: "01" | "02";
+  // Override manual del producto sobre el motor automático de retenciones
+  // (null = usa la retención automática de la factura, calculada por
+  // régimen del emisor + tipo de cliente). Nunca se aplica a persona
+  // física, sin importar lo que traiga el producto.
+  isr_retencion_rate: number | null;
+  iva_retencion_rate: number | null;
   product_id?: string;
 }
 
@@ -198,6 +206,9 @@ function NewInvoice() {
   const totals = useMemo(() => {
     const isrPct = taxTreatment?.isrRetencionPct ?? 0;
     const ivaRetPct = taxTreatment?.ivaRetencionPct ?? 0;
+    // Persona física nunca lleva retención, sin excepción — ni el motor
+    // automático ni un producto con tasa fija pueden anular esta regla.
+    const isPersonaFisica = taxTreatment?.clientType === "persona_fisica";
     let subtotal = 0;
     let ivaTotal = 0;
     let isrRetencionTotal = 0;
@@ -206,8 +217,11 @@ function NewInvoice() {
       const lineSubtotal = toMoney(i.quantity * i.unit_price - i.discount);
       subtotal = toMoney(subtotal + lineSubtotal);
       ivaTotal = toMoney(ivaTotal + toMoney(lineSubtotal * i.iva_rate));
-      isrRetencionTotal = toMoney(isrRetencionTotal + toMoney(lineSubtotal * (isrPct / 100)));
-      ivaRetencionTotal = toMoney(ivaRetencionTotal + toMoney(lineSubtotal * (ivaRetPct / 100)));
+      const isrFraction = isPersonaFisica ? 0 : (i.isr_retencion_rate ?? isrPct / 100);
+      const ivaRetFraction =
+        isPersonaFisica || i.tax_object === "01" ? 0 : (i.iva_retencion_rate ?? ivaRetPct / 100);
+      isrRetencionTotal = toMoney(isrRetencionTotal + toMoney(lineSubtotal * isrFraction));
+      ivaRetencionTotal = toMoney(ivaRetencionTotal + toMoney(lineSubtotal * ivaRetFraction));
     }
     const retentionsTotal = toMoney(isrRetencionTotal + ivaRetencionTotal);
     const total = toMoney(subtotal + ivaTotal - retentionsTotal);
@@ -266,7 +280,9 @@ function NewInvoice() {
         }
         const { data } = await supabase
           .from("products")
-          .select("id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object")
+          .select(
+            "id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object, isr_retencion_rate, iva_retencion_rate",
+          )
           .eq("id", resumeProductId)
           .maybeSingle();
         if (data) {
@@ -282,6 +298,10 @@ function NewInvoice() {
               discount: 0,
               iva_rate: Number(data.iva_rate),
               tax_object: data.tax_object === "01" ? "01" : "02",
+              isr_retencion_rate:
+                data.isr_retencion_rate === null ? null : Number(data.isr_retencion_rate),
+              iva_retencion_rate:
+                data.iva_retencion_rate === null ? null : Number(data.iva_retencion_rate),
             },
           ]);
           toast.success("Producto creado y agregado a la factura");
@@ -291,7 +311,6 @@ function NewInvoice() {
       }
       window.history.replaceState({}, "", "/invoices/new");
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function goCreateProduct() {
@@ -383,8 +402,12 @@ function NewInvoice() {
 
       const isrPct = taxTreatment?.isrRetencionPct ?? 0;
       const ivaRetPct = taxTreatment?.ivaRetencionPct ?? 0;
+      const isPersonaFisica = taxTreatment?.clientType === "persona_fisica";
       const itemRows = items.map((i, idx) => {
         const lineSubtotal = toMoney(i.quantity * i.unit_price - i.discount);
+        const isrFraction = isPersonaFisica ? 0 : (i.isr_retencion_rate ?? isrPct / 100);
+        const ivaRetFraction =
+          isPersonaFisica || i.tax_object === "01" ? 0 : (i.iva_retencion_rate ?? ivaRetPct / 100);
         return {
           invoice_id: invoice.id,
           user_id: u.user.id,
@@ -398,10 +421,10 @@ function NewInvoice() {
           iva_rate: i.iva_rate,
           tax_object: i.tax_object,
           iva_amount: (i.quantity * i.unit_price - i.discount) * i.iva_rate,
-          isr_retencion_rate: isrPct / 100,
-          isr_retencion_amount: toMoney(lineSubtotal * (isrPct / 100)),
-          iva_retencion_rate: ivaRetPct / 100,
-          iva_retencion_amount: toMoney(lineSubtotal * (ivaRetPct / 100)),
+          isr_retencion_rate: isrFraction,
+          isr_retencion_amount: toMoney(lineSubtotal * isrFraction),
+          iva_retencion_rate: ivaRetFraction,
+          iva_retencion_amount: toMoney(lineSubtotal * ivaRetFraction),
           amount: i.quantity * i.unit_price - i.discount,
           position: idx,
         };
@@ -533,6 +556,7 @@ function NewInvoice() {
             items={items}
             setItems={setItems}
             onCreateProduct={goCreateProduct}
+            clientType={taxTreatment?.clientType}
             onNext={() =>
               items.length > 0 ? setStep(3) : toast.error("Agrega al menos un concepto")
             }
@@ -549,7 +573,6 @@ function NewInvoice() {
             setSaveReceiverEdits={setSaveReceiverEdits}
             items={items}
             totals={totals}
-            taxTreatment={taxTreatment}
             cfdiType={cfdiType}
             setCfdiType={setCfdiType}
             paymentMethod={paymentMethod}
@@ -662,11 +685,13 @@ function StepItems({
   items,
   setItems,
   onCreateProduct,
+  clientType,
   onNext,
 }: {
   items: LineItem[];
   setItems: (i: LineItem[]) => void;
   onCreateProduct: () => void;
+  clientType: string | undefined;
   onNext: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -675,7 +700,9 @@ function StepItems({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object")
+        .select(
+          "id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object, isr_retencion_rate, iva_retencion_rate",
+        )
         .eq("is_active", true)
         .order("description");
       if (error) throw error;
@@ -696,6 +723,8 @@ function StepItems({
         discount: 0,
         iva_rate: Number(p.iva_rate),
         tax_object: p.tax_object === "01" ? "01" : "02",
+        isr_retencion_rate: p.isr_retencion_rate === null ? null : Number(p.isr_retencion_rate),
+        iva_retencion_rate: p.iva_retencion_rate === null ? null : Number(p.iva_retencion_rate),
       },
     ]);
     setOpen(false);
@@ -713,6 +742,8 @@ function StepItems({
         discount: 0,
         iva_rate: 0.16,
         tax_object: "02",
+        isr_retencion_rate: null,
+        iva_retencion_rate: null,
       },
     ]);
     setOpen(false);
@@ -822,6 +853,13 @@ function StepItems({
               )}
             </Mini>
           </div>
+          {(it.isr_retencion_rate !== null || it.iva_retencion_rate !== null) && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Retención fija de este producto: ISR {formatPct((it.isr_retencion_rate ?? 0) * 100)} ·
+              IVA {formatPct((it.iva_retencion_rate ?? 0) * 100)}
+              {clientType === "persona_fisica" && " (no aplica: el receptor es persona física)"}
+            </p>
+          )}
           <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
             <span className="text-xs text-muted-foreground">Importe</span>
             <span className="font-bold">
@@ -946,7 +984,6 @@ type StepReviewProps = {
     retentionsTotal: number;
     total: number;
   };
-  taxTreatment: { isrRetencionPct: number; ivaRetencionPct: number } | null | undefined;
   cfdiType: string;
   setCfdiType: (v: string) => void;
   paymentMethod: string;
@@ -975,7 +1012,6 @@ function StepReview(props: StepReviewProps) {
     setSaveReceiverEdits,
     items,
     totals,
-    taxTreatment,
     cfdiType,
     setCfdiType,
     paymentMethod,
@@ -1258,13 +1294,17 @@ function StepReview(props: StepReviewProps) {
           <Row label="IVA" value={formatMXN(totals.ivaTotal)} />
           {totals.isrRetencionTotal > 0 && (
             <Row
-              label={`Retención ISR (${formatPct(taxTreatment?.isrRetencionPct)})`}
+              label={`Retención ISR (${formatPct(
+                totals.subtotal > 0 ? (totals.isrRetencionTotal / totals.subtotal) * 100 : 0,
+              )})`}
               value={`-${formatMXN(totals.isrRetencionTotal)}`}
             />
           )}
           {totals.ivaRetencionTotal > 0 && (
             <Row
-              label={`Retención IVA (${formatPct(taxTreatment?.ivaRetencionPct)})`}
+              label={`Retención IVA (${formatPct(
+                totals.subtotal > 0 ? (totals.ivaRetencionTotal / totals.subtotal) * 100 : 0,
+              )})`}
               value={`-${formatMXN(totals.ivaRetencionTotal)}`}
             />
           )}

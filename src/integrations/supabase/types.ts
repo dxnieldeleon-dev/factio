@@ -643,7 +643,9 @@ export type Database = {
           image_url: string | null;
           internal_code: string | null;
           is_active: boolean;
+          isr_retencion_rate: number | null;
           iva_rate: number;
+          iva_retencion_rate: number | null;
           sat_key: string;
           sat_unit: string;
           tax_object: string;
@@ -660,7 +662,9 @@ export type Database = {
           image_url?: string | null;
           internal_code?: string | null;
           is_active?: boolean;
+          isr_retencion_rate?: number | null;
           iva_rate?: number;
+          iva_retencion_rate?: number | null;
           sat_key: string;
           sat_unit: string;
           tax_object?: string;
@@ -677,7 +681,9 @@ export type Database = {
           image_url?: string | null;
           internal_code?: string | null;
           is_active?: boolean;
+          isr_retencion_rate?: number | null;
           iva_rate?: number;
+          iva_retencion_rate?: number | null;
           sat_key?: string;
           sat_unit?: string;
           tax_object?: string;

@@ -201,12 +201,14 @@ async function buildCfdiPayload(
     return json({ ok: false, reason: "Un CFDI PPD debe usar la forma de pago 99." }, 400);
   }
 
-  // Retention (ISR/IVA retenido) is invoice-level: it depends on the
-  // issuer's regime, the receiver's client_type, and the issuer's activity
-  // category — never on individual item content — so it's resolved once,
-  // not per item. Always server-side: the rate is a business rule derived
-  // from regime/client/activity, not something a client request should be
-  // trusted to supply (unlike iva_rate, which is a plain per-item choice).
+  // The automatic retention rate depends on the issuer's regime, the
+  // receiver's client_type, and the issuer's activity category — never on
+  // individual item content — so it's resolved once per invoice, not per
+  // item. A product can still override it per line (see productOverride
+  // below), but the automatic rate itself is always server-side: it's a
+  // business rule derived from regime/client/activity, not something a
+  // client request should be trusted to supply (unlike iva_rate, which is
+  // a plain per-item choice).
   const activityProfile = context.company.activity_profiles as
     | { activity_category?: string }
     | null
@@ -226,6 +228,10 @@ async function buildCfdiPayload(
       warning: taxTreatment.warning,
     });
   }
+
+  // Persona física nunca lleva retención, sin excepción — ni el motor
+  // automático ni un producto con tasa fija pueden anular esta regla.
+  const isPersonaFisica = taxTreatment.clientType === "persona_fisica";
 
   let subtotal = 0;
   let ivaTotal = 0;
@@ -266,10 +272,25 @@ async function buildCfdiPayload(
       return json({ ok: false, reason: "El descuento no puede exceder el importe." }, 400);
     }
     const lineIva = taxObject === "01" ? 0 : toMoney(lineSubtotal * ivaRate);
-    const lineIsrRetencion = toMoney(lineSubtotal * (taxTreatment.isrRetencionPct / 100));
+
+    // Un producto puede fijar su propia tasa de retención (override del
+    // motor automático de la factura) — pero solo aplica a persona moral;
+    // nunca se retiene a persona física, sin importar lo que diga el
+    // producto. Sin override, se usa la tasa automática de siempre.
+    const productOverride = item.products as {
+      isr_retencion_rate: number | null;
+      iva_retencion_rate: number | null;
+    } | null;
+    const isrFraction = isPersonaFisica
+      ? 0
+      : (productOverride?.isr_retencion_rate ?? taxTreatment.isrRetencionPct / 100);
     // Sin traslado de IVA no hay nada que retener por ese concepto de IVA.
-    const lineIvaRetencion =
-      taxObject === "01" ? 0 : toMoney(lineSubtotal * (taxTreatment.ivaRetencionPct / 100));
+    const ivaRetFraction =
+      isPersonaFisica || taxObject === "01"
+        ? 0
+        : (productOverride?.iva_retencion_rate ?? taxTreatment.ivaRetencionPct / 100);
+    const lineIsrRetencion = toMoney(lineSubtotal * isrFraction);
+    const lineIvaRetencion = toMoney(lineSubtotal * ivaRetFraction);
     subtotal = toMoney(subtotal + lineSubtotal);
     ivaTotal = toMoney(ivaTotal + lineIva);
     isrRetencionTotal = toMoney(isrRetencionTotal + lineIsrRetencion);
@@ -292,7 +313,7 @@ async function buildCfdiPayload(
       taxes.push({
         Name: "ISR",
         Base: lineSubtotal,
-        Rate: toRate(taxTreatment.isrRetencionPct / 100),
+        Rate: toRate(isrFraction),
         IsRetention: true,
         IsQuota: false,
         Total: lineIsrRetencion,
@@ -302,7 +323,7 @@ async function buildCfdiPayload(
       taxes.push({
         Name: "IVA",
         Base: lineSubtotal,
-        Rate: toRate(taxTreatment.ivaRetencionPct / 100),
+        Rate: toRate(ivaRetFraction),
         IsRetention: true,
         IsQuota: false,
         Total: lineIvaRetencion,
@@ -619,7 +640,7 @@ async function loadInvoiceContext(
     supabase
       .from("invoice_items")
       .select(
-        "id, invoice_id, user_id, sat_key, sat_unit, description, quantity, unit_price, discount, iva_rate, iva_amount, tax_object, amount, position",
+        "id, invoice_id, user_id, sat_key, sat_unit, description, quantity, unit_price, discount, iva_rate, iva_amount, tax_object, amount, position, products(isr_retencion_rate, iva_retencion_rate)",
       )
       .eq("invoice_id", invoice.id)
       .eq("user_id", user.id)
