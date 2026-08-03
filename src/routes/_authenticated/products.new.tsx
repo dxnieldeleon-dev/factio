@@ -29,6 +29,17 @@ function NewProduct() {
     internal_code: "",
     category: "",
   });
+  // Espeja la pregunta del SAT al timbrar: "¿es objeto de impuesto?". Solo
+  // exponemos 01 (No) / 02 (Sí) — el catálogo c_ObjetoImp también tiene 03/04
+  // para casos especiales (comercio exterior, ciertos donativos) que no
+  // aplican al perfil de usuario de esta app.
+  const [taxObject, setTaxObject] = useState<"01" | "02">("02");
+
+  function onTaxObjectChange(next: "01" | "02") {
+    setTaxObject(next);
+    if (next === "01") set("iva_rate", "0");
+    else if (form.iva_rate === "0") set("iva_rate", "0.16");
+  }
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
@@ -139,6 +150,7 @@ function NewProduct() {
           sat_unit: form.sat_unit,
           unit_price: price,
           iva_rate: parseFloat(form.iva_rate),
+          tax_object: taxObject,
           internal_code: form.internal_code.trim() || null,
           category: form.category.trim() || null,
         })
@@ -263,41 +275,31 @@ function NewProduct() {
                 required
               />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Precio unitario (MXN)">
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                    $
-                  </span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.01"
-                    min="0"
-                    value={form.unit_price}
-                    onChange={(e) => set("unit_price", e.target.value)}
-                    onFocus={(e) => e.target.select()}
-                    placeholder="0.00"
-                    className="ff-input pl-7 font-mono"
-                    required
-                  />
-                </div>
-              </Field>
-              <Field
-                label="IVA"
-                hint="16% aplica casi siempre. Usa 8% solo si facturas desde zona fronteriza."
-              >
-                <select
-                  value={form.iva_rate}
-                  onChange={(e) => set("iva_rate", e.target.value)}
-                  className="ff-input"
-                >
-                  <option value="0.16">16%</option>
-                  <option value="0.08">8% (frontera)</option>
-                  <option value="0">0% / Exento</option>
-                </select>
-              </Field>
-            </div>
+            <Field label="Precio unitario (MXN)">
+              <div className="relative">
+                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  $
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  value={form.unit_price}
+                  onChange={(e) => set("unit_price", e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  placeholder="0.00"
+                  className="ff-input pl-7 font-mono"
+                  required
+                />
+              </div>
+            </Field>
+            <TaxObjectFields
+              taxObject={taxObject}
+              onTaxObjectChange={onTaxObjectChange}
+              ivaRate={form.iva_rate}
+              onIvaRateChange={(v) => set("iva_rate", v)}
+            />
           </>
         )}
 
@@ -338,41 +340,31 @@ function NewProduct() {
                 ))}
               </select>
             </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Precio unitario (MXN)">
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                    $
-                  </span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.01"
-                    min="0"
-                    value={form.unit_price}
-                    onChange={(e) => set("unit_price", e.target.value)}
-                    onFocus={(e) => e.target.select()}
-                    placeholder="0.00"
-                    className="ff-input pl-7 font-mono"
-                    required
-                  />
-                </div>
-              </Field>
-              <Field
-                label="IVA"
-                hint="16% aplica casi siempre. Usa 8% solo si facturas desde zona fronteriza."
-              >
-                <select
-                  value={form.iva_rate}
-                  onChange={(e) => set("iva_rate", e.target.value)}
-                  className="ff-input"
-                >
-                  <option value="0.16">16%</option>
-                  <option value="0.08">8% (frontera)</option>
-                  <option value="0">0% / Exento</option>
-                </select>
-              </Field>
-            </div>
+            <Field label="Precio unitario (MXN)">
+              <div className="relative">
+                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  $
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  value={form.unit_price}
+                  onChange={(e) => set("unit_price", e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  placeholder="0.00"
+                  className="ff-input pl-7 font-mono"
+                  required
+                />
+              </div>
+            </Field>
+            <TaxObjectFields
+              taxObject={taxObject}
+              onTaxObjectChange={onTaxObjectChange}
+              ivaRate={form.iva_rate}
+              onIvaRateChange={(v) => set("iva_rate", v)}
+            />
             <div className="grid grid-cols-2 gap-3">
               <Field
                 label="Código interno (opcional)"
@@ -428,5 +420,66 @@ function Field({
       {children}
       {hint && <span className="mt-1 block text-[11px] text-muted-foreground">{hint}</span>}
     </label>
+  );
+}
+
+// Refleja la pregunta que hace el propio portal del SAT al timbrar: primero
+// si el concepto es objeto de impuesto, y solo si la respuesta es sí se
+// piden los impuestos que le corresponden (aquí, IVA).
+function TaxObjectFields({
+  taxObject,
+  onTaxObjectChange,
+  ivaRate,
+  onIvaRateChange,
+}: {
+  taxObject: "01" | "02";
+  onTaxObjectChange: (next: "01" | "02") => void;
+  ivaRate: string;
+  onIvaRateChange: (next: string) => void;
+}) {
+  return (
+    <>
+      <Field
+        label="¿Es objeto de impuesto?"
+        hint="La gran mayoría de productos y servicios sí lo son. Marca «No» solo para casos exentos (ej. donativos, ciertas actividades sin IVA)."
+      >
+        <div className="flex gap-2 rounded-2xl bg-muted p-1">
+          <button
+            type="button"
+            onClick={() => onTaxObjectChange("02")}
+            className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${taxObject === "02" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+          >
+            Sí
+          </button>
+          <button
+            type="button"
+            onClick={() => onTaxObjectChange("01")}
+            className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${taxObject === "01" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+          >
+            No
+          </button>
+        </div>
+      </Field>
+      {taxObject === "02" ? (
+        <Field
+          label="IVA"
+          hint="16% aplica casi siempre. Usa 8% solo si facturas desde zona fronteriza."
+        >
+          <select
+            value={ivaRate}
+            onChange={(e) => onIvaRateChange(e.target.value)}
+            className="ff-input"
+          >
+            <option value="0.16">16%</option>
+            <option value="0.08">8% (frontera)</option>
+            <option value="0">0% / Exento</option>
+          </select>
+        </Field>
+      ) : (
+        <p className="rounded-2xl bg-muted/60 px-4 py-3 text-xs text-muted-foreground">
+          Este producto o servicio no llevará IVA al facturarlo.
+        </p>
+      )}
+    </>
   );
 }

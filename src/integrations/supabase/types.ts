@@ -329,6 +329,7 @@ export type Database = {
           quantity: number;
           sat_key: string;
           sat_unit: string;
+          tax_object: string;
           unit_price: number;
           user_id: string;
         };
@@ -350,6 +351,7 @@ export type Database = {
           quantity?: number;
           sat_key: string;
           sat_unit: string;
+          tax_object?: string;
           unit_price?: number;
           user_id: string;
         };
@@ -371,6 +373,7 @@ export type Database = {
           quantity?: number;
           sat_key?: string;
           sat_unit?: string;
+          tax_object?: string;
           unit_price?: number;
           user_id?: string;
         };
@@ -643,6 +646,7 @@ export type Database = {
           iva_rate: number;
           sat_key: string;
           sat_unit: string;
+          tax_object: string;
           unit_price: number;
           updated_at: string;
           user_id: string;
@@ -659,6 +663,7 @@ export type Database = {
           iva_rate?: number;
           sat_key: string;
           sat_unit: string;
+          tax_object?: string;
           unit_price?: number;
           updated_at?: string;
           user_id: string;
@@ -675,6 +680,7 @@ export type Database = {
           iva_rate?: number;
           sat_key?: string;
           sat_unit?: string;
+          tax_object?: string;
           unit_price?: number;
           updated_at?: string;
           user_id?: string;
