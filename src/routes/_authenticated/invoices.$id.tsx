@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Copy, Download, Share2, Ban, Loader2, Send } from "lucide-react";
+import { ArrowLeft, Copy, Download, Share2, Ban, Loader2, Send, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
@@ -18,6 +18,36 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+// Mismo redondeo de moneda que usa la Edge Function facturama-create-cfdi;
+// los totales guardados deben coincidir bit a bit con lo que ella recalcula.
+function toMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+const IVA_RATE_OPTIONS = [
+  { value: 0.16, label: "16%" },
+  { value: 0.08, label: "8%" },
+  { value: 0, label: "0%" },
+];
+
+// Tasas confirmadas para 2026 (ver supabase/migrations/20260731020000_tax_withholding_rules.sql).
+const ISR_RETENCION_OPTIONS = [
+  { value: 0, label: "0% (sin retención)" },
+  { value: 1.25, label: "1.25% (RESICO 626 → persona moral)" },
+  { value: 10, label: "10% (Actividad Empresarial 612 → persona moral)" },
+];
+const IVA_RETENCION_OPTIONS = [
+  { value: 0, label: "0% (sin retención)" },
+  { value: 10.6667, label: "10.6667% (persona moral, 612 o 626)" },
+];
 
 export const Route = createFileRoute("/_authenticated/invoices/$id")({
   component: InvoiceDetail,
@@ -35,14 +65,14 @@ async function loadInvoice(id: string) {
     supabase
       .from("invoices")
       .select(
-        "id, series, folio, total, subtotal, iva_total, status, created_at, issued_at, uuid_fiscal, client_snapshot, xml_url, pdf_url, payment_method, payment_form, cfdi_use, currency, cancellation_reason, cancellation_status, cancellation_requested_at, cancellation_replacement_uuid, cancelled_at, client_id, clients(phone)",
+        "id, series, folio, total, subtotal, iva_total, isr_retencion_total, iva_retencion_total, retentions_total, status, created_at, issued_at, uuid_fiscal, client_snapshot, xml_url, pdf_url, payment_method, payment_form, cfdi_use, currency, cancellation_reason, cancellation_status, cancellation_requested_at, cancellation_replacement_uuid, cancelled_at, client_id, clients(phone)",
       )
       .eq("id", id)
       .maybeSingle(),
     supabase
       .from("invoice_items")
       .select(
-        "id, description, quantity, unit_price, discount, iva_rate, iva_amount, amount, sat_key, sat_unit",
+        "id, description, quantity, unit_price, discount, iva_rate, iva_amount, isr_retencion_rate, isr_retencion_amount, iva_retencion_rate, iva_retencion_amount, amount, sat_key, sat_unit",
       )
       .eq("invoice_id", id)
       .order("position"),
@@ -68,6 +98,11 @@ function InvoiceDetail() {
   const [cancelling, setCancelling] = useState(false);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
   const [stamping, setStamping] = useState(false);
+  const [taxDialogOpen, setTaxDialogOpen] = useState(false);
+  const [itemIvaRates, setItemIvaRates] = useState<Record<string, number>>({});
+  const [isrRetencionPct, setIsrRetencionPct] = useState(0);
+  const [ivaRetencionPct, setIvaRetencionPct] = useState(0);
+  const [savingTaxes, setSavingTaxes] = useState(false);
 
   const folioFmt = data
     ? `${data.invoice.series}-${String(data.invoice.folio).padStart(6, "0")}`
@@ -130,6 +165,85 @@ function InvoiceDetail() {
       toast.error(err instanceof Error ? err.message : "No pudimos timbrar la factura");
     } finally {
       setStamping(false);
+    }
+  }
+
+  function openTaxDialog() {
+    if (!data) return;
+    setItemIvaRates(Object.fromEntries(data.items.map((item) => [item.id, Number(item.iva_rate)])));
+    setIsrRetencionPct(Number(data.items[0]?.isr_retencion_rate ?? 0) * 100);
+    setIvaRetencionPct(Number(data.items[0]?.iva_retencion_rate ?? 0) * 100);
+    setTaxDialogOpen(true);
+  }
+
+  async function saveTaxes() {
+    if (!data) return;
+    setSavingTaxes(true);
+    try {
+      const isrFraction = isrRetencionPct / 100;
+      const ivaRetFraction = ivaRetencionPct / 100;
+
+      let subtotal = 0;
+      let ivaTotal = 0;
+      let isrRetencionTotal = 0;
+      let ivaRetencionTotal = 0;
+      const rows = data.items.map((item) => {
+        const lineSubtotal = toMoney(item.quantity * item.unit_price - item.discount);
+        const ivaRate = itemIvaRates[item.id] ?? Number(item.iva_rate);
+        const lineIva = toMoney(lineSubtotal * ivaRate);
+        const lineIsrRetencion = toMoney(lineSubtotal * isrFraction);
+        const lineIvaRetencion = toMoney(lineSubtotal * ivaRetFraction);
+        subtotal = toMoney(subtotal + lineSubtotal);
+        ivaTotal = toMoney(ivaTotal + lineIva);
+        isrRetencionTotal = toMoney(isrRetencionTotal + lineIsrRetencion);
+        ivaRetencionTotal = toMoney(ivaRetencionTotal + lineIvaRetencion);
+        return {
+          id: item.id,
+          iva_rate: ivaRate,
+          iva_amount: lineIva,
+          isr_retencion_rate: isrFraction,
+          isr_retencion_amount: lineIsrRetencion,
+          iva_retencion_rate: ivaRetFraction,
+          iva_retencion_amount: lineIvaRetencion,
+        };
+      });
+      const retentionsTotal = toMoney(isrRetencionTotal + ivaRetencionTotal);
+      const total = toMoney(subtotal + ivaTotal - retentionsTotal);
+
+      for (const row of rows) {
+        const { error } = await supabase
+          .from("invoice_items")
+          .update({
+            iva_rate: row.iva_rate,
+            iva_amount: row.iva_amount,
+            isr_retencion_rate: row.isr_retencion_rate,
+            isr_retencion_amount: row.isr_retencion_amount,
+            iva_retencion_rate: row.iva_retencion_rate,
+            iva_retencion_amount: row.iva_retencion_amount,
+          })
+          .eq("id", row.id);
+        if (error) throw error;
+      }
+
+      const { error: invoiceError } = await supabase
+        .from("invoices")
+        .update({
+          iva_total: ivaTotal,
+          isr_retencion_total: isrRetencionTotal,
+          iva_retencion_total: ivaRetencionTotal,
+          retentions_total: retentionsTotal,
+          total,
+        })
+        .eq("id", data.invoice.id);
+      if (invoiceError) throw invoiceError;
+
+      toast.success("Impuestos actualizados");
+      setTaxDialogOpen(false);
+      await refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No pudimos actualizar los impuestos");
+    } finally {
+      setSavingTaxes(false);
     }
   }
 
@@ -324,6 +438,18 @@ function InvoiceDetail() {
             <span>IVA</span>
             <span>{formatMXN(inv.iva_total)}</span>
           </div>
+          {inv.isr_retencion_total > 0 && (
+            <div className="flex justify-between text-destructive">
+              <span>Retención ISR</span>
+              <span>−{formatMXN(inv.isr_retencion_total)}</span>
+            </div>
+          )}
+          {inv.iva_retencion_total > 0 && (
+            <div className="flex justify-between text-destructive">
+              <span>Retención IVA</span>
+              <span>−{formatMXN(inv.iva_retencion_total)}</span>
+            </div>
+          )}
           <div className="flex justify-between pt-1 text-base font-bold">
             <span>Total</span>
             <span>{formatMXN(inv.total)}</span>
@@ -353,6 +479,13 @@ function InvoiceDetail() {
                 <Send className="size-4" /> Continuar con el timbrado
               </>
             )}
+          </button>
+          <button
+            type="button"
+            onClick={openTaxDialog}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold transition active:scale-[0.98]"
+          >
+            <Pencil className="size-3.5" /> Editar impuestos
           </button>
         </section>
       )}
@@ -467,6 +600,98 @@ function InvoiceDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={taxDialogOpen} onOpenChange={setTaxDialogOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar impuestos</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                IVA por concepto
+              </p>
+              {data.items.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3">
+                  <p className="min-w-0 flex-1 truncate text-sm">{item.description}</p>
+                  <select
+                    value={itemIvaRates[item.id] ?? Number(item.iva_rate)}
+                    onChange={(e) =>
+                      setItemIvaRates((rates) => ({
+                        ...rates,
+                        [item.id]: Number(e.target.value),
+                      }))
+                    }
+                    className="w-24 shrink-0 rounded-xl border border-input bg-background px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-4 focus:ring-ring"
+                  >
+                    {IVA_RATE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2 border-t border-border pt-3">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Retención de ISR
+              </label>
+              <select
+                value={isrRetencionPct}
+                onChange={(e) => setIsrRetencionPct(Number(e.target.value))}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-4 focus:ring-ring"
+              >
+                {ISR_RETENCION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Retención de IVA
+              </label>
+              <select
+                value={ivaRetencionPct}
+                onChange={(e) => setIvaRetencionPct(Number(e.target.value))}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-4 focus:ring-ring"
+              >
+                {IVA_RETENCION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Estas tasas se validan de nuevo en servidor al timbrar; si no corresponden al régimen
+              del emisor y al tipo de cliente, el timbrado se rechazará.
+            </p>
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setTaxDialogOpen(false)}
+              disabled={savingTaxes}
+              className="rounded-full border border-border px-4 py-2 text-sm font-semibold disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={saveTaxes}
+              disabled={savingTaxes}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background disabled:opacity-60"
+            >
+              {savingTaxes ? <Loader2 className="size-4 animate-spin" /> : "Guardar cambios"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
