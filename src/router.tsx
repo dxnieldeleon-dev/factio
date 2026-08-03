@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
-import { initSentryClient } from "./lib/sentry.client";
+import { initSentryClient } from "./lib/sentry-browser";
 
 export const getRouter = () => {
   const queryClient = new QueryClient();

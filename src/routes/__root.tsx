@@ -12,7 +12,7 @@ import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { captureRouteException } from "../lib/sentry.client";
+import { captureRouteException } from "../lib/sentry-browser";
 import { supabase } from "@/integrations/supabase/client";
 
 
