@@ -679,14 +679,14 @@ function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: s
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <CsdFileField
           label="Archivo .cer"
-          accept=".cer"
+          accept=".cer,application/x-x509-ca-cert,application/pkix-cert,application/octet-stream"
           file={cerFile}
           onChange={pickFile("cer")}
           error={errors.cer}
         />
         <CsdFileField
           label="Archivo .key"
-          accept=".key"
+          accept=".key,application/octet-stream"
           file={keyFile}
           onChange={pickFile("key")}
           error={errors.key}

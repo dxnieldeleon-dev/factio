@@ -82,8 +82,11 @@ export function CsdForm({ profile }: { profile: CompanyProfileData }) {
   return (
     <section className="space-y-3">
       {configured ? <Status configured /> : <Status configured={false} />}
-      <input ref={cerInputRef} type="file" accept=".cer" className="hidden" onChange={(e) => setCerFile(e.target.files?.[0] ?? null)} />
-      <input ref={keyInputRef} type="file" accept=".key" className="hidden" onChange={(e) => setKeyFile(e.target.files?.[0] ?? null)} />
+      {/* Android maps `accept` extensions to MIME types via the OS registry; .cer/.key
+          aren't registered on most phones, so without a binary fallback the file picker
+          greys out every file as "not allowed". */}
+      <input ref={cerInputRef} type="file" accept=".cer,application/x-x509-ca-cert,application/pkix-cert,application/octet-stream" className="hidden" onChange={(e) => setCerFile(e.target.files?.[0] ?? null)} />
+      <input ref={keyInputRef} type="file" accept=".key,application/octet-stream" className="hidden" onChange={(e) => setKeyFile(e.target.files?.[0] ?? null)} />
       <FileField label="Certificado (.cer)" file={cerFile} existing={Boolean(profile.company?.csd_cer_url)} onClick={() => cerInputRef.current?.click()} />
       <FileField label="Llave privada (.key)" file={keyFile} existing={Boolean(profile.company?.csd_key_url)} onClick={() => keyInputRef.current?.click()} />
       <Field label="Contraseña del CSD">
