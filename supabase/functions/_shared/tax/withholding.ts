@@ -90,15 +90,21 @@ export async function resolveTaxTreatment(
     return await resolvePlatformTreatment(supabase, clientType);
   }
 
-  if (!params.taxRegime || !params.activityCategory) {
+  if (!params.taxRegime) {
     return {
       clientType,
       isrRetencionPct: 0,
       ivaRetencionPct: 0,
-      warning:
-        "No se pudo determinar el régimen fiscal o la categoría de actividad del emisor; no se calculó retención.",
+      warning: "No se pudo determinar el régimen fiscal del emisor; no se calculó retención.",
     };
   }
+
+  // El emisor aún no tiene un activity_profile vinculado (el onboarding que
+  // lo asigna todavía no existe) — servicios_profesionales es el default de
+  // la columna activity_profiles.activity_category y, para las tasas
+  // vigentes, es idéntico a arrendamiento en ambos regímenes, así que no
+  // hay riesgo de aplicar una tasa incorrecta mientras tanto.
+  const activityCategory = params.activityCategory ?? "servicios_profesionales";
 
   const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await supabase
@@ -106,7 +112,7 @@ export async function resolveTaxTreatment(
     .select("isr_retencion_pct, iva_retencion_pct")
     .eq("tax_regime", params.taxRegime)
     .eq("client_type", clientType)
-    .eq("activity_category", params.activityCategory)
+    .eq("activity_category", activityCategory)
     .eq("is_active", true)
     .lte("vigente_desde", today)
     .or(`vigente_hasta.is.null,vigente_hasta.gte.${today}`)
@@ -125,7 +131,7 @@ export async function resolveTaxTreatment(
       clientType,
       isrRetencionPct: 0,
       ivaRetencionPct: 0,
-      warning: `No hay regla de retención configurada para régimen ${params.taxRegime}, cliente ${clientType}, actividad ${params.activityCategory}.`,
+      warning: `No hay regla de retención configurada para régimen ${params.taxRegime}, cliente ${clientType}, actividad ${activityCategory}.`,
     };
   }
   return {
