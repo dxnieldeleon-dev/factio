@@ -1,10 +1,21 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowRight, Loader2, Upload, CheckCircle2, Lock, Image as ImageIcon } from "lucide-react";
+import {
+  ArrowRight,
+  Loader2,
+  Upload,
+  CheckCircle2,
+  Lock,
+  Image as ImageIcon,
+  FileText,
+  Sparkles,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { taxRegimesForPersonType, type PersonType } from "@/lib/sat-catalogs";
 import { classifyRfc, normalizeFiscalName, validateRfcStrict } from "@/lib/fiscal";
+import { extractPdfText } from "@/lib/pdf-text";
+import { parseConstanciaText, matchActivityProfile } from "@/lib/constancia-parser";
 import factioLogoInverted from "@/assets/factio-logo-inverted.png.asset.json";
 
 export const Route = createFileRoute("/onboarding")({
@@ -35,6 +46,12 @@ function OnboardingPage() {
   const [legalName, setLegalName] = useState("");
   const [taxRegime, setTaxRegime] = useState("");
   const [postalCode, setPostalCode] = useState("");
+  const [activityProfileId, setActivityProfileId] = useState("");
+  const [activityProfiles, setActivityProfiles] = useState<
+    { id: string; name: string; description: string | null }[]
+  >([]);
+  const [parsingConstancia, setParsingConstancia] = useState(false);
+  const [constanciaSummary, setConstanciaSummary] = useState<string[] | null>(null);
 
   // Section B — optional
   const [tradeName, setTradeName] = useState("");
@@ -53,13 +70,17 @@ function OnboardingPage() {
       if (!u.user) return;
       setUserId(u.user.id);
       setEmail((prev) => prev || u.user!.email || "");
-      const { data: comp } = await supabase
-        .from("companies")
-        .select(
-          "id, rfc, legal_name, tax_regime, postal_code, trade_name, phone, email, logo_url, onboarding_completed",
-        )
-        .eq("user_id", u.user.id)
-        .maybeSingle();
+      const [{ data: comp }, { data: profiles }] = await Promise.all([
+        supabase
+          .from("companies")
+          .select(
+            "id, rfc, legal_name, tax_regime, postal_code, trade_name, phone, email, logo_url, activity_profile_id, onboarding_completed",
+          )
+          .eq("user_id", u.user.id)
+          .maybeSingle(),
+        supabase.from("activity_profiles").select("id, name, description").order("sort_order"),
+      ]);
+      setActivityProfiles(profiles ?? []);
       if (comp) {
         setCompanyId(comp.id);
         setRfc(comp.rfc ?? "");
@@ -70,6 +91,7 @@ function OnboardingPage() {
         setPhone(comp.phone ?? "");
         setEmail(comp.email ?? u.user.email ?? "");
         setExistingLogoUrl(comp.logo_url ?? null);
+        setActivityProfileId(comp.activity_profile_id ?? "");
         if (comp.onboarding_completed) {
           navigate({ to: "/dashboard", replace: true });
           return;
@@ -105,6 +127,65 @@ function OnboardingPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableRegimes]);
+
+  async function onConstanciaFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (f.type !== "application/pdf") {
+      toast.error("Sube tu Constancia en formato PDF.");
+      return;
+    }
+    if (f.size > 8 * 1024 * 1024) {
+      toast.error("El PDF no debe superar 8 MB.");
+      return;
+    }
+    setParsingConstancia(true);
+    setConstanciaSummary(null);
+    try {
+      const text = await extractPdfText(f);
+      const parsed = parseConstanciaText(text);
+      const found: string[] = [];
+
+      if (parsed.rfc) {
+        setRfc(parsed.rfc);
+        found.push("RFC");
+      }
+      if (parsed.legalName) {
+        setLegalName(normalizeFiscalName(parsed.legalName));
+        found.push("nombre o razón social");
+      }
+      if (parsed.postalCode) {
+        setPostalCode(parsed.postalCode);
+        found.push("código postal");
+      }
+      if (parsed.taxRegimeCode) {
+        setTaxRegime(parsed.taxRegimeCode);
+        found.push("régimen fiscal");
+      }
+
+      const activityMatch = await matchActivityProfile(parsed.activityText);
+      if (activityMatch) {
+        setActivityProfileId(activityMatch.id);
+        found.push(`actividad (${activityMatch.name})`);
+      }
+
+      if (found.length === 0) {
+        setConstanciaSummary(null);
+        toast.error(
+          "No pudimos leer datos de este PDF. Verifica que sea tu Constancia y captura los datos manualmente.",
+        );
+      } else {
+        setConstanciaSummary(found);
+        toast.success("Revisamos tu Constancia. Verifica los datos antes de continuar.");
+      }
+    } catch (err) {
+      console.error("[onboarding] constancia parse failed", err);
+      toast.error("No pudimos leer ese PDF. Captura los datos manualmente.");
+    } finally {
+      setParsingConstancia(false);
+    }
+  }
 
   function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -154,6 +235,7 @@ function OnboardingPage() {
         phone: phone.trim() || null,
         email: email.trim() || null,
         logo_url: logoUrl,
+        activity_profile_id: activityProfileId || null,
         is_default: true,
       };
 
@@ -207,6 +289,46 @@ function OnboardingPage() {
               <p className="mt-1 text-xs text-muted-foreground">
                 Como aparecen en tu Constancia de Situación Fiscal. Obligatorios para poder timbrar.
               </p>
+
+              <div className="mt-4 rounded-2xl border border-dashed border-input bg-muted/40 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#011025] text-[#C2E8FF]">
+                    <Sparkles className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">
+                      Sube tu Constancia y llenamos esto por ti
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      Opcional. Leemos el PDF en tu navegador (no se envía a ningún servidor) e
+                      intentamos completar RFC, nombre, código postal, régimen y actividad. Siempre
+                      revisa los datos antes de continuar.
+                    </p>
+                    <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-4 py-2 text-xs font-semibold hover:bg-accent">
+                      {parsingConstancia ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <FileText className="size-4" />
+                      )}
+                      {parsingConstancia ? "Leyendo PDF…" : "Subir Constancia (PDF)"}
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        disabled={parsingConstancia}
+                        onChange={onConstanciaFile}
+                      />
+                    </label>
+                    {constanciaSummary && (
+                      <p className="mt-2 flex items-start gap-1.5 text-[11px] text-emerald-700">
+                        <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
+                        Detectamos: {constanciaSummary.join(", ")}. Revisa que sea correcto.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <Field label="RFC" required error={attempted ? errors.rfc : undefined}>
                   <input
@@ -288,9 +410,31 @@ function OnboardingPage() {
                   </select>
                   {personType && (
                     <p className="mt-1.5 text-[11px] text-muted-foreground">
-                      Detectado por tu RFC: <strong>{personType === "fisica" ? "Persona Física" : "Persona Moral"}</strong> — solo se muestran los regímenes aplicables.
+                      Detectado por tu RFC:{" "}
+                      <strong>
+                        {personType === "fisica" ? "Persona Física" : "Persona Moral"}
+                      </strong>{" "}
+                      — solo se muestran los regímenes aplicables.
                     </p>
                   )}
+                </Field>
+                <Field label="Actividad principal (opcional)" className="sm:col-span-2">
+                  <select
+                    value={activityProfileId}
+                    onChange={(e) => setActivityProfileId(e.target.value)}
+                    className={inputCls(false)}
+                  >
+                    <option value="">Sin asignar</option>
+                    {activityProfiles.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">
+                    Nos ayuda a sugerirte claves SAT al agregar servicios y a calcular retenciones
+                    correctas en tus facturas. Puedes cambiarla después desde tu perfil.
+                  </p>
                 </Field>
               </div>
             </div>
