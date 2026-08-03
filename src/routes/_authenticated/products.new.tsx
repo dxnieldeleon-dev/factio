@@ -235,6 +235,7 @@ function NewProduct() {
                     min="0"
                     value={form.unit_price}
                     onChange={(e) => set("unit_price", e.target.value)}
+                    onFocus={(e) => e.target.select()}
                     placeholder="0.00"
                     className="ff-input pl-7 font-mono"
                     required
@@ -309,6 +310,7 @@ function NewProduct() {
                     min="0"
                     value={form.unit_price}
                     onChange={(e) => set("unit_price", e.target.value)}
+                    onFocus={(e) => e.target.select()}
                     placeholder="0.00"
                     className="ff-input pl-7 font-mono"
                     required

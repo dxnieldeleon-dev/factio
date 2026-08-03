@@ -16,6 +16,7 @@ import {
   isCfdiWorkflowError,
   isFacturamaError,
 } from "../_shared/facturama/errors.ts";
+import { resolveTaxTreatment } from "../_shared/tax/withholding.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -84,10 +85,10 @@ type FacturamaCfdiPayload = {
     Discount: number;
     TaxObject: "02";
     Taxes: Array<{
-      Name: "IVA";
+      Name: "IVA" | "ISR";
       Base: number;
       Rate: number;
-      IsRetention: false;
+      IsRetention: boolean;
       IsQuota: false;
       Total: number;
     }>;
@@ -108,6 +109,12 @@ function toMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+// Tax rates (e.g. 10.6667% -> 0.106667) need more precision than currency
+// amounts — rounding a rate to 2 decimals would turn 1.25% into 1%.
+function toRate(value: number): number {
+  return Math.round((value + Number.EPSILON) * 1e6) / 1e6;
+}
+
 function valuesMatch(left: number, right: number): boolean {
   return Math.abs(left - right) < 0.01;
 }
@@ -124,7 +131,10 @@ function invoiceMetadata(notes: unknown) {
   };
 }
 
-function buildCfdiPayload(context: InvoiceContext): FacturamaCfdiPayload | Response {
+async function buildCfdiPayload(
+  context: InvoiceContext,
+  user: AuthenticatedUser,
+): Promise<FacturamaCfdiPayload | Response> {
   const issuerRfc = asText(context.company.rfc)?.toUpperCase();
   const issuerName = asText(context.company.legal_name);
   const issuerRegime = asText(context.company.tax_regime);
@@ -191,8 +201,36 @@ function buildCfdiPayload(context: InvoiceContext): FacturamaCfdiPayload | Respo
     return json({ ok: false, reason: "Un CFDI PPD debe usar la forma de pago 99." }, 400);
   }
 
+  // Retention (ISR/IVA retenido) is invoice-level: it depends on the
+  // issuer's regime, the receiver's client_type, and the issuer's activity
+  // category — never on individual item content — so it's resolved once,
+  // not per item. Always server-side: the rate is a business rule derived
+  // from regime/client/activity, not something a client request should be
+  // trusted to supply (unlike iva_rate, which is a plain per-item choice).
+  const activityProfile = context.company.activity_profiles as
+    | { activity_category?: string }
+    | null
+    | undefined;
+  const credentials = getSupabaseCredentials();
+  if (credentials instanceof Response) return credentials;
+  const taxSupabase = createUserScopedClient(credentials, user.accessToken);
+  const taxTreatment = await resolveTaxTreatment(taxSupabase, {
+    taxRegime: issuerRegime,
+    activityCategory: activityProfile?.activity_category ?? null,
+    rfc: receiverRfc,
+    isTechnologyPlatform: context.client.is_technology_platform === true,
+  });
+  if (taxTreatment.warning) {
+    console.warn("Tax withholding could not be fully resolved", {
+      invoiceId: context.invoice.id,
+      warning: taxTreatment.warning,
+    });
+  }
+
   let subtotal = 0;
   let ivaTotal = 0;
+  let isrRetencionTotal = 0;
+  let ivaRetencionTotal = 0;
   const items: FacturamaCfdiPayload["Items"] = [];
   for (const item of context.items) {
     const productCode = asText(item.sat_key);
@@ -222,8 +260,44 @@ function buildCfdiPayload(context: InvoiceContext): FacturamaCfdiPayload | Respo
       return json({ ok: false, reason: "El descuento no puede exceder el importe." }, 400);
     }
     const lineIva = toMoney(lineSubtotal * ivaRate);
+    const lineIsrRetencion = toMoney(lineSubtotal * (taxTreatment.isrRetencionPct / 100));
+    const lineIvaRetencion = toMoney(lineSubtotal * (taxTreatment.ivaRetencionPct / 100));
     subtotal = toMoney(subtotal + lineSubtotal);
     ivaTotal = toMoney(ivaTotal + lineIva);
+    isrRetencionTotal = toMoney(isrRetencionTotal + lineIsrRetencion);
+    ivaRetencionTotal = toMoney(ivaRetencionTotal + lineIvaRetencion);
+
+    const taxes: FacturamaCfdiPayload["Items"][number]["Taxes"] = [
+      {
+        Name: "IVA",
+        Base: lineSubtotal,
+        Rate: ivaRate,
+        IsRetention: false,
+        IsQuota: false,
+        Total: lineIva,
+      },
+    ];
+    if (lineIsrRetencion > 0) {
+      taxes.push({
+        Name: "ISR",
+        Base: lineSubtotal,
+        Rate: toRate(taxTreatment.isrRetencionPct / 100),
+        IsRetention: true,
+        IsQuota: false,
+        Total: lineIsrRetencion,
+      });
+    }
+    if (lineIvaRetencion > 0) {
+      taxes.push({
+        Name: "IVA",
+        Base: lineSubtotal,
+        Rate: toRate(taxTreatment.ivaRetencionPct / 100),
+        IsRetention: true,
+        IsQuota: false,
+        Total: lineIvaRetencion,
+      });
+    }
+
     items.push({
       ProductCode: productCode,
       Description: description,
@@ -233,30 +307,36 @@ function buildCfdiPayload(context: InvoiceContext): FacturamaCfdiPayload | Respo
       Subtotal: lineSubtotal,
       Discount: discount,
       TaxObject: "02",
-      Taxes: [
-        {
-          Name: "IVA",
-          Base: lineSubtotal,
-          Rate: ivaRate,
-          IsRetention: false,
-          IsQuota: false,
-          Total: lineIva,
-        },
-      ],
+      Taxes: taxes,
+      // Facturama's item Total is Subtotal + traslados only — retenciones
+      // never reduce it (matches the official CFDI standard: a Concepto's
+      // own amount is never adjusted for tax, only the Comprobante-level
+      // total is). Facturama computes the retention-adjusted document total
+      // itself from each item's Taxes array.
       Total: toMoney(lineSubtotal + lineIva),
     });
   }
 
   const storedSubtotal = asNumber(context.invoice.subtotal);
   const storedIva = asNumber(context.invoice.iva_total);
+  const storedIsrRetencion = asNumber(context.invoice.isr_retencion_total);
+  const storedIvaRetencion = asNumber(context.invoice.iva_retencion_total);
+  const storedRetentionsTotal = asNumber(context.invoice.retentions_total);
   const storedTotal = asNumber(context.invoice.total);
-  const total = toMoney(subtotal + ivaTotal);
+  const retentionsTotal = toMoney(isrRetencionTotal + ivaRetencionTotal);
+  const total = toMoney(subtotal + ivaTotal - retentionsTotal);
   if (
     storedSubtotal === null ||
     storedIva === null ||
+    storedIsrRetencion === null ||
+    storedIvaRetencion === null ||
+    storedRetentionsTotal === null ||
     storedTotal === null ||
     !valuesMatch(storedSubtotal, subtotal) ||
     !valuesMatch(storedIva, ivaTotal) ||
+    !valuesMatch(storedIsrRetencion, isrRetencionTotal) ||
+    !valuesMatch(storedIvaRetencion, ivaRetencionTotal) ||
+    !valuesMatch(storedRetentionsTotal, retentionsTotal) ||
     !valuesMatch(storedTotal, total)
   ) {
     return json(
@@ -491,7 +571,7 @@ async function loadInvoiceContext(
   const { data: invoice, error: invoiceError } = await supabase
     .from("invoices")
     .select(
-      "id, user_id, company_id, client_id, client_snapshot, series, folio, status, payment_method, payment_form, cfdi_use, currency, exchange_rate, subtotal, discount, iva_total, retentions_total, total, notes",
+      "id, user_id, company_id, client_id, client_snapshot, series, folio, status, payment_method, payment_form, cfdi_use, currency, exchange_rate, subtotal, discount, iva_total, isr_retencion_total, iva_retencion_total, retentions_total, total, notes",
     )
     .eq("id", invoiceId)
     .eq("user_id", user.id)
@@ -512,14 +592,16 @@ async function loadInvoiceContext(
     supabase
       .from("companies")
       .select(
-        "id, user_id, legal_name, rfc, tax_regime, postal_code, csd_cer_url, csd_key_url, csd_serial_number, csd_valid_to",
+        "id, user_id, legal_name, rfc, tax_regime, postal_code, csd_cer_url, csd_key_url, csd_serial_number, csd_valid_to, activity_profile_id, activity_profiles(activity_category)",
       )
       .eq("id", invoice.company_id)
       .eq("user_id", user.id)
       .maybeSingle(),
     supabase
       .from("clients")
-      .select("id, user_id, legal_name, rfc, tax_regime, postal_code, cfdi_use")
+      .select(
+        "id, user_id, legal_name, rfc, tax_regime, postal_code, cfdi_use, is_technology_platform",
+      )
       .eq("id", invoice.client_id)
       .eq("user_id", user.id)
       .maybeSingle(),
@@ -582,7 +664,7 @@ Deno.serve(async (req) => {
   const context = await loadInvoiceContext(user, invoiceId);
   if (context instanceof Response) return context;
 
-  const cfdiPayload = buildCfdiPayload(context);
+  const cfdiPayload = await buildCfdiPayload(context, user);
   if (cfdiPayload instanceof Response) return cfdiPayload;
 
   if (context.invoice.status !== "draft") {

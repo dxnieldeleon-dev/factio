@@ -10,6 +10,7 @@ export type Database = {
     Tables: {
       activity_profiles: {
         Row: {
+          activity_category: string;
           created_at: string;
           description: string | null;
           id: string;
@@ -19,6 +20,7 @@ export type Database = {
           sort_order: number;
         };
         Insert: {
+          activity_category?: string;
           created_at?: string;
           description?: string | null;
           id?: string;
@@ -28,6 +30,7 @@ export type Database = {
           sort_order?: number;
         };
         Update: {
+          activity_category?: string;
           created_at?: string;
           description?: string | null;
           id?: string;
@@ -152,6 +155,7 @@ export type Database = {
           email: string | null;
           id: string;
           is_favorite: boolean;
+          is_technology_platform: boolean;
           legal_name: string;
           notes: string | null;
           phone: string | null;
@@ -168,6 +172,7 @@ export type Database = {
           email?: string | null;
           id?: string;
           is_favorite?: boolean;
+          is_technology_platform?: boolean;
           legal_name: string;
           notes?: string | null;
           phone?: string | null;
@@ -184,6 +189,7 @@ export type Database = {
           email?: string | null;
           id?: string;
           is_favorite?: boolean;
+          is_technology_platform?: boolean;
           legal_name?: string;
           notes?: string | null;
           phone?: string | null;
@@ -312,8 +318,12 @@ export type Database = {
           discount: number;
           id: string;
           invoice_id: string;
+          isr_retencion_amount: number;
+          isr_retencion_rate: number;
           iva_amount: number;
           iva_rate: number;
+          iva_retencion_amount: number;
+          iva_retencion_rate: number;
           position: number;
           product_id: string | null;
           quantity: number;
@@ -329,8 +339,12 @@ export type Database = {
           discount?: number;
           id?: string;
           invoice_id: string;
+          isr_retencion_amount?: number;
+          isr_retencion_rate?: number;
           iva_amount?: number;
           iva_rate?: number;
+          iva_retencion_amount?: number;
+          iva_retencion_rate?: number;
           position?: number;
           product_id?: string | null;
           quantity?: number;
@@ -346,8 +360,12 @@ export type Database = {
           discount?: number;
           id?: string;
           invoice_id?: string;
+          isr_retencion_amount?: number;
+          isr_retencion_rate?: number;
           iva_amount?: number;
           iva_rate?: number;
+          iva_retencion_amount?: number;
+          iva_retencion_rate?: number;
           position?: number;
           product_id?: string | null;
           quantity?: number;
@@ -391,7 +409,9 @@ export type Database = {
           exchange_rate: number;
           folio: number;
           id: string;
+          isr_retencion_total: number;
           issued_at: string | null;
+          iva_retencion_total: number;
           iva_total: number;
           notes: string | null;
           payment_form: string | null;
@@ -427,7 +447,9 @@ export type Database = {
           exchange_rate?: number;
           folio: number;
           id?: string;
+          isr_retencion_total?: number;
           issued_at?: string | null;
+          iva_retencion_total?: number;
           iva_total?: number;
           notes?: string | null;
           payment_form?: string | null;
@@ -463,7 +485,9 @@ export type Database = {
           exchange_rate?: number;
           folio?: number;
           id?: string;
+          isr_retencion_total?: number;
           issued_at?: string | null;
+          iva_retencion_total?: number;
           iva_total?: number;
           notes?: string | null;
           payment_form?: string | null;
@@ -828,6 +852,102 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      tax_withholding_rules: {
+        Row: {
+          activity_category: string;
+          client_type: string;
+          created_at: string;
+          fundamento_legal: string | null;
+          id: string;
+          is_active: boolean;
+          isr_retencion_pct: number;
+          iva_retencion_pct: number;
+          notes: string | null;
+          objeto_imp: string;
+          tax_regime: string;
+          updated_at: string;
+          vigente_desde: string;
+          vigente_hasta: string | null;
+        };
+        Insert: {
+          activity_category: string;
+          client_type: string;
+          created_at?: string;
+          fundamento_legal?: string | null;
+          id?: string;
+          is_active?: boolean;
+          isr_retencion_pct?: number;
+          iva_retencion_pct?: number;
+          notes?: string | null;
+          objeto_imp?: string;
+          tax_regime: string;
+          updated_at?: string;
+          vigente_desde?: string;
+          vigente_hasta?: string | null;
+        };
+        Update: {
+          activity_category?: string;
+          client_type?: string;
+          created_at?: string;
+          fundamento_legal?: string | null;
+          id?: string;
+          is_active?: boolean;
+          isr_retencion_pct?: number;
+          iva_retencion_pct?: number;
+          notes?: string | null;
+          objeto_imp?: string;
+          tax_regime?: string;
+          updated_at?: string;
+          vigente_desde?: string;
+          vigente_hasta?: string | null;
+        };
+        Relationships: [];
+      };
+      platform_isr_brackets: {
+        Row: {
+          created_at: string;
+          fundamento_legal: string | null;
+          id: string;
+          is_active: boolean;
+          isr_pct: number;
+          iva_retencion_con_rfc_pct: number;
+          iva_retencion_sin_rfc_pct: number;
+          max_monthly_income: number | null;
+          min_monthly_income: number;
+          platform_activity_type: string;
+          updated_at: string;
+          vigente_desde: string;
+        };
+        Insert: {
+          created_at?: string;
+          fundamento_legal?: string | null;
+          id?: string;
+          is_active?: boolean;
+          isr_pct: number;
+          iva_retencion_con_rfc_pct?: number;
+          iva_retencion_sin_rfc_pct?: number;
+          max_monthly_income?: number | null;
+          min_monthly_income: number;
+          platform_activity_type: string;
+          updated_at?: string;
+          vigente_desde?: string;
+        };
+        Update: {
+          created_at?: string;
+          fundamento_legal?: string | null;
+          id?: string;
+          is_active?: boolean;
+          isr_pct?: number;
+          iva_retencion_con_rfc_pct?: number;
+          iva_retencion_sin_rfc_pct?: number;
+          max_monthly_income?: number | null;
+          min_monthly_income?: number;
+          platform_activity_type?: string;
+          updated_at?: string;
+          vigente_desde?: string;
+        };
+        Relationships: [];
       };
       user_roles: {
         Row: {

@@ -7,6 +7,7 @@ import { validateRFC } from "@/lib/format";
 import { classifyRfc } from "@/lib/fiscal";
 import { taxRegimesForPersonType, type PersonType } from "@/lib/sat-catalogs";
 import { useQueryClient } from "@tanstack/react-query";
+import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute("/_authenticated/clients/new")({
   component: NewClient,
@@ -24,11 +25,9 @@ function NewClient() {
     email: "",
     phone: "",
   });
+  const [isTechnologyPlatform, setIsTechnologyPlatform] = useState(false);
 
-  const returnTo = useMemo(
-    () => new URLSearchParams(window.location.search).get("return_to"),
-    [],
-  );
+  const returnTo = useMemo(() => new URLSearchParams(window.location.search).get("return_to"), []);
 
   function set<K extends keyof typeof form>(k: K, v: string) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -47,7 +46,8 @@ function NewClient() {
   function setRfc(value: string) {
     const upper = value.toUpperCase();
     const nextKind = classifyRfc(upper);
-    const nextPersonType = nextKind === "physical" ? "fisica" : nextKind === "moral" ? "moral" : null;
+    const nextPersonType =
+      nextKind === "physical" ? "fisica" : nextKind === "moral" ? "moral" : null;
     const regimesForNext = taxRegimesForPersonType(nextPersonType);
     setForm((f) => ({
       ...f,
@@ -59,10 +59,22 @@ function NewClient() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const rfcCheck = validateRFC(form.rfc);
-    if (!rfcCheck.valid) { toast.error(rfcCheck.reason!); return; }
-    if (!form.legal_name.trim()) { toast.error("La razón social es requerida"); return; }
-    if (!/^\d{5}$/.test(form.postal_code.trim())) { toast.error("El código postal debe tener 5 dígitos"); return; }
-    if (!form.tax_regime) { toast.error("Selecciona un régimen fiscal"); return; }
+    if (!rfcCheck.valid) {
+      toast.error(rfcCheck.reason!);
+      return;
+    }
+    if (!form.legal_name.trim()) {
+      toast.error("La razón social es requerida");
+      return;
+    }
+    if (!/^\d{5}$/.test(form.postal_code.trim())) {
+      toast.error("El código postal debe tener 5 dígitos");
+      return;
+    }
+    if (!form.tax_regime) {
+      toast.error("Selecciona un régimen fiscal");
+      return;
+    }
     setLoading(true);
     try {
       const { data: userData, error: userErr } = await supabase.auth.getUser();
@@ -77,6 +89,7 @@ function NewClient() {
           postal_code: form.postal_code.trim(),
           email: form.email.trim() || null,
           phone: form.phone.trim() || null,
+          is_technology_platform: isTechnologyPlatform,
         })
         .select("id")
         .single();
@@ -100,11 +113,17 @@ function NewClient() {
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-6">
       <header className="flex items-center gap-3">
         {returnTo === "invoice" ? (
-          <a href="/invoices/new" className="grid size-10 place-items-center rounded-full border border-border bg-surface">
+          <a
+            href="/invoices/new"
+            className="grid size-10 place-items-center rounded-full border border-border bg-surface"
+          >
             <ArrowLeft className="size-4" />
           </a>
         ) : (
-          <Link to="/clients" className="grid size-10 place-items-center rounded-full border border-border bg-surface">
+          <Link
+            to="/clients"
+            className="grid size-10 place-items-center rounded-full border border-border bg-surface"
+          >
             <ArrowLeft className="size-4" />
           </Link>
         )}
@@ -124,28 +143,73 @@ function NewClient() {
           />
         </Field>
         <Field label="Razón social">
-          <input value={form.legal_name} onChange={(e) => set("legal_name", e.target.value)} placeholder="Nombre o razón social" className="ff-input" required />
+          <input
+            value={form.legal_name}
+            onChange={(e) => set("legal_name", e.target.value)}
+            placeholder="Nombre o razón social"
+            className="ff-input"
+            required
+          />
         </Field>
         <Field label="Régimen fiscal">
-          <select value={form.tax_regime} onChange={(e) => set("tax_regime", e.target.value)} className="ff-input">
+          <select
+            value={form.tax_regime}
+            onChange={(e) => set("tax_regime", e.target.value)}
+            className="ff-input"
+          >
             <option value="">Selecciona un régimen…</option>
-            {availableRegimes.map((r) => <option key={r.code} value={r.code}>{r.code} — {r.name}</option>)}
+            {availableRegimes.map((r) => (
+              <option key={r.code} value={r.code}>
+                {r.code} — {r.name}
+              </option>
+            ))}
           </select>
           {personType && (
             <p className="mt-1.5 text-[11px] text-muted-foreground">
-              Detectado por el RFC: <strong>{personType === "fisica" ? "Persona Física" : "Persona Moral"}</strong> — solo se muestran los regímenes aplicables.
+              Detectado por el RFC:{" "}
+              <strong>{personType === "fisica" ? "Persona Física" : "Persona Moral"}</strong> — solo
+              se muestran los regímenes aplicables.
             </p>
           )}
         </Field>
         <Field label="Código postal">
-          <input value={form.postal_code} onChange={(e) => set("postal_code", e.target.value.replace(/\D/g, ""))} placeholder="00000" maxLength={5} inputMode="numeric" pattern="\d{5}" className="ff-input font-mono" required />
+          <input
+            value={form.postal_code}
+            onChange={(e) => set("postal_code", e.target.value.replace(/\D/g, ""))}
+            placeholder="00000"
+            maxLength={5}
+            inputMode="numeric"
+            pattern="\d{5}"
+            className="ff-input font-mono"
+            required
+          />
         </Field>
         <Field label="Correo (opcional)">
-          <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="cliente@correo.com" className="ff-input" />
+          <input
+            type="email"
+            value={form.email}
+            onChange={(e) => set("email", e.target.value)}
+            placeholder="cliente@correo.com"
+            className="ff-input"
+          />
         </Field>
         <Field label="Teléfono (opcional)">
-          <input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="55 1234 5678" inputMode="tel" className="ff-input" />
+          <input
+            type="tel"
+            value={form.phone}
+            onChange={(e) => set("phone", e.target.value)}
+            placeholder="55 1234 5678"
+            inputMode="tel"
+            className="ff-input"
+          />
         </Field>
+
+        <label className="flex items-center justify-between gap-3 py-1">
+          <span className="text-xs text-muted-foreground">
+            Es una plataforma tecnológica (Uber, Didi, Airbnb, etc.)
+          </span>
+          <Switch checked={isTechnologyPlatform} onCheckedChange={setIsTechnologyPlatform} />
+        </label>
 
         <button
           type="submit"
@@ -164,7 +228,9 @@ function NewClient() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
       {children}
     </label>
   );
