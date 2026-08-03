@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Search, Plus, Package } from "lucide-react";
+import { Search, Plus, Package, Folder } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { EmptyState } from "@/components/empty-state";
 import { formatMXN } from "@/lib/format";
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/_authenticated/products/")({
 async function loadProducts() {
   const { data, error } = await supabase
     .from("products")
-    .select("id, description, sat_key, sat_unit, unit_price, internal_code, category")
+    .select("id, description, sat_key, sat_unit, unit_price, internal_code, category, image_url")
     .eq("is_active", true)
     .order("description");
   if (error) throw error;
@@ -91,20 +91,36 @@ function ProductsList() {
             }
           />
         ) : (
-          <ul className="divide-y divide-border rounded-3xl border border-border bg-surface">
+          <ul className="space-y-3">
             {filtered.map((p) => (
               <li key={p.id}>
                 <Link
-                  to="/products/$id/edit"
+                  to="/products/$id"
                   params={{ id: p.id }}
-                  className="flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-muted/40"
+                  className="flex items-center gap-3 rounded-3xl border border-border bg-surface p-3 transition-colors hover:bg-muted/40"
                 >
-                  <div className="min-w-0">
+                  <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl bg-muted">
+                    {p.image_url ? (
+                      <img
+                        src={p.image_url}
+                        alt={p.description}
+                        className="size-full object-cover"
+                      />
+                    ) : (
+                      <Package className="size-6 text-muted-foreground/60" strokeWidth={1.4} />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold">{p.description}</p>
-                    <p className="mt-0.5 font-mono text-[10px] uppercase text-muted-foreground">
-                      SAT {p.sat_key} · {p.sat_unit}
-                      {p.internal_code ? ` · ${p.internal_code}` : ""}
-                    </p>
+                    {p.category ? (
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
+                        <Folder className="size-3 shrink-0" /> {p.category}
+                      </p>
+                    ) : (
+                      <p className="mt-0.5 truncate font-mono text-[10px] uppercase text-muted-foreground">
+                        SAT {p.sat_key} · {p.sat_unit}
+                      </p>
+                    )}
                   </div>
                   <p className="shrink-0 font-bold">{formatMXN(p.unit_price)}</p>
                 </Link>

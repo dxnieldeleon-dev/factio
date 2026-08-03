@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Upload, Package } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { COMMON_SAT_KEYS, COMMON_SAT_UNITS } from "@/lib/sat-catalogs";
 import { useQueryClient } from "@tanstack/react-query";
 import { SatKeyPicker } from "@/components/sat-key-picker";
+import { isValidProductImage, uploadProductImage } from "@/lib/product-images";
 
 export const Route = createFileRoute("/_authenticated/products/new")({
   component: NewProduct,
@@ -28,6 +29,20 @@ function NewProduct() {
     internal_code: "",
     category: "",
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  function onImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const problem = isValidProductImage(f);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+    setImageFile(f);
+    setImagePreview(URL.createObjectURL(f));
+  }
 
   // Perfil de actividad de la empresa (Parte 1 de clasificación fiscal): si
   // existe, ofrecemos un catálogo simplificado de servicios con clave y
@@ -130,6 +145,17 @@ function NewProduct() {
         .select("id")
         .single();
       if (error) throw error;
+
+      if (imageFile) {
+        try {
+          const imageUrl = await uploadProductImage(userData.user!.id, inserted.id, imageFile);
+          await supabase.from("products").update({ image_url: imageUrl }).eq("id", inserted.id);
+        } catch (imgErr) {
+          console.error("[products.new] image upload failed", imgErr);
+          toast.warning("Guardamos el producto, pero no pudimos subir la foto.");
+        }
+      }
+
       toast.success(showSimplifiedService ? "Servicio agregado" : "Producto agregado");
       qc.invalidateQueries({ queryKey: ["products"] });
       if (returnTo === "invoice") {
@@ -191,6 +217,21 @@ function NewProduct() {
       )}
 
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
+        <label className="flex items-center gap-3">
+          <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-input bg-muted">
+            {imagePreview ? (
+              <img src={imagePreview} alt="Vista previa" className="size-full object-cover" />
+            ) : (
+              <Package className="size-6 text-muted-foreground" />
+            )}
+          </div>
+          <span className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-4 py-2 text-xs font-medium hover:bg-accent">
+            <Upload className="size-4" />
+            {imageFile ? "Cambiar foto" : "Agregar foto (opcional)"}
+            <input type="file" accept="image/*" className="hidden" onChange={onImageChange} />
+          </span>
+        </label>
+
         {hasProfile && kind === "servicio" && (
           <Field label="Tipo de servicio">
             <select
