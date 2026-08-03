@@ -104,6 +104,17 @@ export async function uploadCsd(payload: FacturamaCsdPayload) {
   });
 }
 
+// POST /api-lite/csds only creates — it 400s with "Ya existe un CSD asociado a
+// este RFC" if the RFC already has one registered. Re-validating (password
+// typo fix, CSD renewal, etc.) needs the PUT counterpart instead.
+export async function updateCsd(payload: FacturamaCsdPayload) {
+  return await request<unknown>(`/api-lite/csds/${encodeURIComponent(payload.Rfc)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function cancelCfdi(
   id: string,
   motive: "01" | "02" | "03" | "04",

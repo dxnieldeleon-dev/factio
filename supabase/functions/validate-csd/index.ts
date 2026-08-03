@@ -9,7 +9,7 @@
 import { encodeBase64 } from "jsr:@std/encoding/base64";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import forge from "npm:node-forge@1.3.1";
-import { uploadCsd } from "../_shared/facturama/client.ts";
+import { uploadCsd, updateCsd } from "../_shared/facturama/client.ts";
 import { isFacturamaError } from "../_shared/facturama/errors.ts";
 
 const cors = {
@@ -207,28 +207,55 @@ Deno.serve(async (req) => {
     return json({ success: false, field: validation.field, error: validation.error });
   }
 
+  const csdPayload = {
+    Rfc: company.rfc.trim().toUpperCase(),
+    Certificate: encodeBase64(cerBytes),
+    PrivateKey: encodeBase64(keyBytes),
+    PrivateKeyPassword: payload.password,
+  };
   try {
-    await uploadCsd({
-      Rfc: company.rfc.trim().toUpperCase(),
-      Certificate: encodeBase64(cerBytes),
-      PrivateKey: encodeBase64(keyBytes),
-      PrivateKeyPassword: payload.password,
-    });
+    await uploadCsd(csdPayload);
   } catch (error) {
-    const message = isFacturamaError(error)
-      ? error.message
-      : "No fue posible cargar el CSD en Facturama.";
-    await supabase
-      .from("companies")
-      .update({ csd_status: "error", csd_last_error: message })
-      .eq("id", company.id);
-    await removeStagedFiles();
-    return json({
-      success: false,
-      error: message,
-      facturama_status: isFacturamaError(error) ? error.status : null,
-      facturama_response: isFacturamaError(error) ? error.pacResponse : null,
-    });
+    // Facturama's create endpoint 400s if the RFC already has a CSD on file
+    // (re-validating after a password typo, renewing an expired CSD, etc.
+    // all hit this) — fall back to their update endpoint instead of failing.
+    const alreadyExists =
+      isFacturamaError(error) && error.message.includes("Ya existe un CSD asociado");
+    if (alreadyExists) {
+      try {
+        await updateCsd(csdPayload);
+      } catch (updateError) {
+        const message = isFacturamaError(updateError)
+          ? updateError.message
+          : "No fue posible actualizar el CSD en Facturama.";
+        await supabase
+          .from("companies")
+          .update({ csd_status: "error", csd_last_error: message })
+          .eq("id", company.id);
+        await removeStagedFiles();
+        return json({
+          success: false,
+          error: message,
+          facturama_status: isFacturamaError(updateError) ? updateError.status : null,
+          facturama_response: isFacturamaError(updateError) ? updateError.pacResponse : null,
+        });
+      }
+    } else {
+      const message = isFacturamaError(error)
+        ? error.message
+        : "No fue posible cargar el CSD en Facturama.";
+      await supabase
+        .from("companies")
+        .update({ csd_status: "error", csd_last_error: message })
+        .eq("id", company.id);
+      await removeStagedFiles();
+      return json({
+        success: false,
+        error: message,
+        facturama_status: isFacturamaError(error) ? error.status : null,
+        facturama_response: isFacturamaError(error) ? error.pacResponse : null,
+      });
+    }
   }
 
   const finalCerPath = `${authData.user.id}/${company.id}/cert.cer`;
