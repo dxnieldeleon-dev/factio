@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Copy, Download, Share2, Ban, Loader2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, Share2, Ban, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
@@ -67,6 +67,7 @@ function InvoiceDetail() {
   const [replacementUuid, setReplacementUuid] = useState("");
   const [cancelling, setCancelling] = useState(false);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+  const [stamping, setStamping] = useState(false);
 
   const folioFmt = data
     ? `${data.invoice.series}-${String(data.invoice.folio).padStart(6, "0")}`
@@ -95,6 +96,40 @@ function InvoiceDetail() {
       toast.success("UUID copiado");
     } catch {
       toast.error("No pudimos copiar");
+    }
+  }
+
+  async function stampDraft() {
+    if (!data) return;
+    setStamping(true);
+    try {
+      const { data: stampResult, error: stampFunctionError } = await supabase.functions.invoke(
+        "facturama-create-cfdi",
+        { body: { invoice_id: data.invoice.id } },
+      );
+      if (stampFunctionError) {
+        throw new Error(
+          await getEdgeFunctionErrorMessage(
+            stampFunctionError,
+            "No fue posible comunicarse con el servicio de facturación.",
+          ),
+        );
+      }
+      if (!stampResult?.stamped) {
+        toast.error(stampResult?.reason ?? "No fue posible timbrar la factura.");
+        return;
+      }
+      toast.success("Factura timbrada correctamente");
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["dashboard"] }),
+        qc.invalidateQueries({ queryKey: ["profile"] }),
+        qc.invalidateQueries({ queryKey: ["invoices", "history"] }),
+      ]);
+      await refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No pudimos timbrar la factura");
+    } finally {
+      setStamping(false);
     }
   }
 
@@ -166,6 +201,7 @@ function InvoiceDetail() {
 
   const inv = data.invoice;
   const snap = (inv.client_snapshot as { legal_name?: string; rfc?: string } | null) ?? {};
+  const isDraft = inv.status === "draft";
   const isIssued = inv.status === "issued";
   const isCancelled = inv.status === "cancelled";
   const cancellationPending = inv.cancellation_status === "pending";
@@ -294,6 +330,32 @@ function InvoiceDetail() {
           </div>
         </div>
       </section>
+
+      {isDraft && (
+        <section className="mt-5 space-y-2">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Acciones
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Esta factura se guardó como borrador pero no llegó a timbrarse. Puedes continuar el
+            proceso sin volver a capturar los datos.
+          </p>
+          <button
+            type="button"
+            onClick={stampDraft}
+            disabled={stamping}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-3.5 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-60"
+          >
+            {stamping ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <>
+                <Send className="size-4" /> Continuar con el timbrado
+              </>
+            )}
+          </button>
+        </section>
+      )}
 
       {isIssued && (
         <section className="mt-5 space-y-2">
