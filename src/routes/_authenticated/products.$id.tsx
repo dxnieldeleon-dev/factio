@@ -33,6 +33,7 @@ type ProductDetailRow = {
   sat_unit: string;
   unit_price: number;
   iva_rate: number;
+  tax_object: string;
   internal_code: string | null;
   category: string | null;
   image_url: string | null;
@@ -44,7 +45,7 @@ async function loadProduct(id: string): Promise<ProductDetailRow> {
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, description, sat_key, sat_unit, unit_price, iva_rate, internal_code, category, image_url, created_at, updated_at",
+      "id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object, internal_code, category, image_url, created_at, updated_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -159,7 +160,9 @@ function ProductDetail() {
           {formatMXN(data.unit_price)}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          IVA {Math.round(data.iva_rate * 100)}% incluido al facturar
+          {data.tax_object === "01"
+            ? "No objeto de impuesto"
+            : `IVA ${Math.round(data.iva_rate * 100)}% incluido al facturar`}
         </p>
       </div>
 

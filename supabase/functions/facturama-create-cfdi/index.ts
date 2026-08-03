@@ -83,7 +83,7 @@ type FacturamaCfdiPayload = {
     Quantity: number;
     Subtotal: number;
     Discount: number;
-    TaxObject: "02";
+    TaxObject: "01" | "02";
     Taxes: Array<{
       Name: "IVA" | "ISR";
       Base: number;
@@ -255,28 +255,39 @@ async function buildCfdiPayload(
       return json({ ok: false, reason: "Uno o más conceptos son inválidos." }, 400);
     }
 
+    // El SAT distingue si un concepto es "objeto de impuesto" (c_ObjetoImp).
+    // Fuente de verdad: tax_object en la BD, nunca iva_rate por sí solo — un
+    // concepto marcado "01" (no objeto) no lleva traslado de IVA aunque el
+    // cliente mande una tasa distinta de cero.
+    const taxObject: "01" | "02" = asText(item.tax_object) === "01" ? "01" : "02";
+
     const lineSubtotal = toMoney(quantity * unitPrice - discount);
     if (lineSubtotal < 0) {
       return json({ ok: false, reason: "El descuento no puede exceder el importe." }, 400);
     }
-    const lineIva = toMoney(lineSubtotal * ivaRate);
+    const lineIva = taxObject === "01" ? 0 : toMoney(lineSubtotal * ivaRate);
     const lineIsrRetencion = toMoney(lineSubtotal * (taxTreatment.isrRetencionPct / 100));
-    const lineIvaRetencion = toMoney(lineSubtotal * (taxTreatment.ivaRetencionPct / 100));
+    // Sin traslado de IVA no hay nada que retener por ese concepto de IVA.
+    const lineIvaRetencion =
+      taxObject === "01" ? 0 : toMoney(lineSubtotal * (taxTreatment.ivaRetencionPct / 100));
     subtotal = toMoney(subtotal + lineSubtotal);
     ivaTotal = toMoney(ivaTotal + lineIva);
     isrRetencionTotal = toMoney(isrRetencionTotal + lineIsrRetencion);
     ivaRetencionTotal = toMoney(ivaRetencionTotal + lineIvaRetencion);
 
-    const taxes: FacturamaCfdiPayload["Items"][number]["Taxes"] = [
-      {
-        Name: "IVA",
-        Base: lineSubtotal,
-        Rate: ivaRate,
-        IsRetention: false,
-        IsQuota: false,
-        Total: lineIva,
-      },
-    ];
+    const taxes: FacturamaCfdiPayload["Items"][number]["Taxes"] =
+      taxObject === "02"
+        ? [
+            {
+              Name: "IVA",
+              Base: lineSubtotal,
+              Rate: ivaRate,
+              IsRetention: false,
+              IsQuota: false,
+              Total: lineIva,
+            },
+          ]
+        : [];
     if (lineIsrRetencion > 0) {
       taxes.push({
         Name: "ISR",
@@ -306,7 +317,7 @@ async function buildCfdiPayload(
       Quantity: quantity,
       Subtotal: lineSubtotal,
       Discount: discount,
-      TaxObject: "02",
+      TaxObject: taxObject,
       Taxes: taxes,
       // Facturama's item Total is Subtotal + traslados only — retenciones
       // never reduce it (matches the official CFDI standard: a Concepto's
@@ -608,7 +619,7 @@ async function loadInvoiceContext(
     supabase
       .from("invoice_items")
       .select(
-        "id, invoice_id, user_id, sat_key, sat_unit, description, quantity, unit_price, discount, iva_rate, iva_amount, amount, position",
+        "id, invoice_id, user_id, sat_key, sat_unit, description, quantity, unit_price, discount, iva_rate, iva_amount, tax_object, amount, position",
       )
       .eq("invoice_id", invoice.id)
       .eq("user_id", user.id)

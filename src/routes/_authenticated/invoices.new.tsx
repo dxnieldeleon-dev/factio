@@ -66,6 +66,7 @@ interface ProductRow {
   sat_unit: string;
   unit_price: number;
   iva_rate: number;
+  tax_object: string;
 }
 interface LineItem {
   sat_key: string;
@@ -75,6 +76,7 @@ interface LineItem {
   unit_price: number;
   discount: number;
   iva_rate: number;
+  tax_object: "01" | "02";
   product_id?: string;
 }
 
@@ -264,7 +266,7 @@ function NewInvoice() {
         }
         const { data } = await supabase
           .from("products")
-          .select("id, description, sat_key, sat_unit, unit_price, iva_rate")
+          .select("id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object")
           .eq("id", resumeProductId)
           .maybeSingle();
         if (data) {
@@ -279,6 +281,7 @@ function NewInvoice() {
               unit_price: Number(data.unit_price),
               discount: 0,
               iva_rate: Number(data.iva_rate),
+              tax_object: data.tax_object === "01" ? "01" : "02",
             },
           ]);
           toast.success("Producto creado y agregado a la factura");
@@ -393,6 +396,7 @@ function NewInvoice() {
           unit_price: i.unit_price,
           discount: i.discount,
           iva_rate: i.iva_rate,
+          tax_object: i.tax_object,
           iva_amount: (i.quantity * i.unit_price - i.discount) * i.iva_rate,
           isr_retencion_rate: isrPct / 100,
           isr_retencion_amount: toMoney(lineSubtotal * (isrPct / 100)),
@@ -671,7 +675,7 @@ function StepItems({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, description, sat_key, sat_unit, unit_price, iva_rate")
+        .select("id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object")
         .eq("is_active", true)
         .order("description");
       if (error) throw error;
@@ -691,6 +695,7 @@ function StepItems({
         unit_price: Number(p.unit_price),
         discount: 0,
         iva_rate: Number(p.iva_rate),
+        tax_object: p.tax_object === "01" ? "01" : "02",
       },
     ]);
     setOpen(false);
@@ -707,6 +712,7 @@ function StepItems({
         unit_price: 0,
         discount: 0,
         iva_rate: 0.16,
+        tax_object: "02",
       },
     ]);
     setOpen(false);
@@ -801,15 +807,19 @@ function StepItems({
               </select>
             </Mini>
             <Mini label="IVA">
-              <select
-                value={it.iva_rate}
-                onChange={(e) => update(idx, { iva_rate: Number(e.target.value) })}
-                className="ff-mini"
-              >
-                <option value={0.16}>16%</option>
-                <option value={0.08}>8%</option>
-                <option value={0}>0%</option>
-              </select>
+              {it.tax_object === "01" ? (
+                <p className="ff-mini flex items-center text-muted-foreground">No objeto</p>
+              ) : (
+                <select
+                  value={it.iva_rate}
+                  onChange={(e) => update(idx, { iva_rate: Number(e.target.value) })}
+                  className="ff-mini"
+                >
+                  <option value={0.16}>16%</option>
+                  <option value={0.08}>8%</option>
+                  <option value={0}>0%</option>
+                </select>
+              )}
             </Mini>
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-border pt-3">

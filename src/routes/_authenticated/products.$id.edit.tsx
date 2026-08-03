@@ -30,6 +30,7 @@ type Product = {
   sat_unit: string;
   unit_price: number;
   iva_rate: number;
+  tax_object: "01" | "02";
   internal_code: string | null;
   category: string | null;
   image_url: string | null;
@@ -39,7 +40,7 @@ async function loadProduct(id: string): Promise<Product> {
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, description, sat_key, sat_unit, unit_price, iva_rate, internal_code, category, image_url",
+      "id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object, internal_code, category, image_url",
     )
     .eq("id", id)
     .maybeSingle();
@@ -67,6 +68,12 @@ function EditProduct() {
   }, [data]);
   function set<K extends keyof Product>(key: K, value: Product[K]) {
     setForm((current) => (current ? { ...current, [key]: value } : current));
+  }
+
+  function onTaxObjectChange(next: "01" | "02") {
+    set("tax_object", next);
+    if (next === "01") set("iva_rate", 0);
+    else if (form?.iva_rate === 0) set("iva_rate", 0.16);
   }
 
   function onImageChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -109,6 +116,7 @@ function EditProduct() {
           sat_unit: form.sat_unit,
           unit_price: form.unit_price,
           iva_rate: form.iva_rate,
+          tax_object: form.tax_object,
           internal_code: form.internal_code?.trim() || null,
           category: form.category?.trim() || null,
           image_url: imageUrl,
@@ -216,24 +224,45 @@ function EditProduct() {
             ))}
           </select>
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Precio unitario">
-            <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                $
-              </span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                className="ff-input pl-7 font-mono"
-                value={form.unit_price}
-                onChange={(e) => set("unit_price", Number(e.target.value))}
-                onFocus={(e) => e.target.select()}
-              />
-            </div>
-          </Field>
+        <Field label="Precio unitario">
+          <div className="relative">
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+              $
+            </span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              className="ff-input pl-7 font-mono"
+              value={form.unit_price}
+              onChange={(e) => set("unit_price", Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
+            />
+          </div>
+        </Field>
+        <Field
+          label="¿Es objeto de impuesto?"
+          hint="La gran mayoría de productos y servicios sí lo son. Marca «No» solo para casos exentos (ej. donativos, ciertas actividades sin IVA)."
+        >
+          <div className="flex gap-2 rounded-2xl bg-muted p-1">
+            <button
+              type="button"
+              onClick={() => onTaxObjectChange("02")}
+              className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${form.tax_object === "02" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+            >
+              Sí
+            </button>
+            <button
+              type="button"
+              onClick={() => onTaxObjectChange("01")}
+              className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${form.tax_object === "01" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+            >
+              No
+            </button>
+          </div>
+        </Field>
+        {form.tax_object === "02" ? (
           <Field
             label="IVA"
             hint="16% aplica casi siempre. Usa 8% solo si facturas desde zona fronteriza."
@@ -248,7 +277,11 @@ function EditProduct() {
               <option value="0">0% / Exento</option>
             </select>
           </Field>
-        </div>
+        ) : (
+          <p className="rounded-2xl bg-muted/60 px-4 py-3 text-xs text-muted-foreground">
+            Este producto o servicio no llevará IVA al facturarlo.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Código interno" hint="Para tu propio catálogo; no aparece en la factura.">
             <input
