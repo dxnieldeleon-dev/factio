@@ -56,9 +56,15 @@ export async function resolveTaxTreatment(params: {
     };
   }
 
-  if (!params.taxRegime || !params.activityCategory) {
+  if (!params.taxRegime) {
     return { clientType, isrRetencionPct: 0, ivaRetencionPct: 0, warning: null };
   }
+
+  // El emisor aún no tiene un activity_profile vinculado (no hay onboarding
+  // para asignarlo todavía) — servicios_profesionales es el default de la
+  // columna y, para las tasas vigentes, es idéntico a arrendamiento en
+  // ambos regímenes, así que no hay riesgo de una tasa incorrecta.
+  const activityCategory = params.activityCategory ?? "servicios_profesionales";
 
   const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await supabase
@@ -66,7 +72,7 @@ export async function resolveTaxTreatment(params: {
     .select("isr_retencion_pct, iva_retencion_pct")
     .eq("tax_regime", params.taxRegime)
     .eq("client_type", clientType)
-    .eq("activity_category", params.activityCategory)
+    .eq("activity_category", activityCategory)
     .eq("is_active", true)
     .lte("vigente_desde", today)
     .or(`vigente_hasta.is.null,vigente_hasta.gte.${today}`)
