@@ -1,7 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Copy, Download, Share2, Ban, Loader2, Send, Pencil } from "lucide-react";
+import {
+  ArrowLeft,
+  Copy,
+  Download,
+  Share2,
+  Ban,
+  Loader2,
+  Send,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
@@ -65,7 +75,7 @@ async function loadInvoice(id: string) {
     supabase
       .from("invoices")
       .select(
-        "id, series, folio, total, subtotal, iva_total, isr_retencion_total, iva_retencion_total, retentions_total, status, created_at, issued_at, uuid_fiscal, client_snapshot, xml_url, pdf_url, payment_method, payment_form, cfdi_use, currency, cancellation_reason, cancellation_status, cancellation_requested_at, cancellation_replacement_uuid, cancelled_at, client_id, clients(phone)",
+        "id, series, folio, total, subtotal, iva_total, isr_retencion_total, iva_retencion_total, retentions_total, status, created_at, issued_at, uuid_fiscal, client_snapshot, xml_url, pdf_url, payment_method, payment_form, cfdi_use, currency, cancellation_reason, cancellation_status, cancellation_requested_at, cancellation_replacement_uuid, cancelled_at, client_id, clients(phone), stamping_status, stamping_error",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -98,6 +108,8 @@ function InvoiceDetail() {
   const [cancelling, setCancelling] = useState(false);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
   const [stamping, setStamping] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [taxDialogOpen, setTaxDialogOpen] = useState(false);
   const [itemIvaRates, setItemIvaRates] = useState<Record<string, number>>({});
   const [isrRetencionPct, setIsrRetencionPct] = useState(0);
@@ -165,6 +177,30 @@ function InvoiceDetail() {
       toast.error(err instanceof Error ? err.message : "No pudimos timbrar la factura");
     } finally {
       setStamping(false);
+    }
+  }
+
+  async function deleteDraft() {
+    if (!data) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("invoices")
+        .delete()
+        .eq("id", data.invoice.id)
+        .eq("status", "draft");
+      if (error) throw error;
+      toast.success("Borrador eliminado");
+      setDeleteOpen(false);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["dashboard"] }),
+        qc.invalidateQueries({ queryKey: ["invoices", "history"] }),
+      ]);
+      navigate({ to: "/history" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No pudimos eliminar el borrador");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -319,6 +355,8 @@ function InvoiceDetail() {
   const isIssued = inv.status === "issued";
   const isCancelled = inv.status === "cancelled";
   const cancellationPending = inv.cancellation_status === "pending";
+  const stampBusy = inv.stamping_status === "processing";
+  const needsReconciliation = inv.stamping_status === "reconciliation_required";
 
   return (
     <div className="px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-10">
@@ -466,10 +504,26 @@ function InvoiceDetail() {
             Esta factura se guardó como borrador pero no llegó a timbrarse. Puedes continuar el
             proceso sin volver a capturar los datos.
           </p>
+          {inv.stamping_error && (
+            <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+              {inv.stamping_error}
+            </p>
+          )}
+          {stampBusy && (
+            <p className="rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-900">
+              Esta factura ya está siendo timbrada. Espera un momento y actualiza.
+            </p>
+          )}
+          {needsReconciliation && (
+            <p className="rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-900">
+              El intento anterior no pudo confirmarse. No la reintentes hasta verificar con soporte
+              que no quedó timbrada.
+            </p>
+          )}
           <button
             type="button"
             onClick={stampDraft}
-            disabled={stamping}
+            disabled={stamping || stampBusy || needsReconciliation}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-3.5 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-60"
           >
             {stamping ? (
@@ -483,9 +537,18 @@ function InvoiceDetail() {
           <button
             type="button"
             onClick={openTaxDialog}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold transition active:scale-[0.98]"
+            disabled={stampBusy}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold transition active:scale-[0.98] disabled:opacity-60"
           >
             <Pencil className="size-3.5" /> Editar impuestos
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeleteOpen(true)}
+            disabled={stamping || stampBusy}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/40 bg-surface py-3 text-sm font-semibold text-destructive transition active:scale-[0.98] disabled:opacity-60"
+          >
+            <Trash2 className="size-3.5" /> Eliminar borrador
           </button>
         </section>
       )}
@@ -596,6 +659,31 @@ function InvoiceDetail() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {cancelling ? <Loader2 className="size-4 animate-spin" /> : "Sí, cancelar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este borrador?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará la factura {folioFmt} y sus conceptos. Esta acción no se puede deshacer.
+              Solo puedes eliminar borradores que no han sido timbrados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Conservar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                deleteDraft();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 className="size-4 animate-spin" /> : "Sí, eliminar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
