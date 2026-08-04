@@ -314,7 +314,8 @@ function NewProduct() {
                   onChange={(e) => set("unit_price", e.target.value)}
                   onFocus={(e) => e.target.select()}
                   placeholder="0.00"
-                  className="ff-input pl-7 font-mono"
+                  className="ff-input font-mono"
+                  style={{ paddingLeft: "1.75rem" }}
                   required
                 />
               </div>
@@ -391,7 +392,8 @@ function NewProduct() {
                   onChange={(e) => set("unit_price", e.target.value)}
                   onFocus={(e) => e.target.select()}
                   placeholder="0.00"
-                  className="ff-input pl-7 font-mono"
+                  className="ff-input font-mono"
+                  style={{ paddingLeft: "1.75rem" }}
                   required
                 />
               </div>
