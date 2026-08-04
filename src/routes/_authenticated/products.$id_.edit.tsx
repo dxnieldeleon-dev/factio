@@ -253,7 +253,8 @@ function EditProduct() {
               min="0"
               step="0.01"
               inputMode="decimal"
-              className="ff-input pl-7 font-mono"
+              className="ff-input font-mono"
+              style={{ paddingLeft: "1.75rem" }}
               value={form.unit_price}
               onChange={(e) => set("unit_price", Number(e.target.value))}
               onFocus={(e) => e.target.select()}
