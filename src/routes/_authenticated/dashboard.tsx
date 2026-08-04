@@ -5,6 +5,7 @@ import {
   Plus,
   Bell,
   TrendingUp,
+  TrendingDown,
   Users as UsersIcon,
   Percent,
   LogOut,
@@ -12,6 +13,7 @@ import {
   ShieldAlert,
   X,
   Zap,
+  Receipt,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -39,6 +41,9 @@ interface DashboardData {
   hasActiveSubscription: boolean;
   stampBalance: number | null;
   facturasIncluidas: number | null;
+  incomeChangePct: number | null;
+  newClientsThisMonth: number;
+  incomeSparkline: number[];
 }
 
 async function loadDashboard(): Promise<DashboardData> {
@@ -47,7 +52,9 @@ async function loadDashboard(): Promise<DashboardData> {
   const email = userData.user?.email ?? "";
 
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const startOfSparkline = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
   const companyRes = await supabase
     .from("companies")
@@ -58,12 +65,21 @@ async function loadDashboard(): Promise<DashboardData> {
 
   const companyId = companyRes.data?.id;
 
-  const [monthRes, clientsRes, recentRes, walletRes, subRes] = await Promise.all([
+  const [
+    monthRes,
+    clientsRes,
+    recentRes,
+    walletRes,
+    subRes,
+    prevMonthRes,
+    sparklineRes,
+    newClientsRes,
+  ] = await Promise.all([
     supabase
       .from("invoices")
       .select("subtotal, iva_total")
       .eq("status", "issued")
-      .gte("created_at", startOfMonth),
+      .gte("created_at", startOfMonth.toISOString()),
     supabase.from("clients").select("id", { count: "exact", head: true }),
     supabase
       .from("invoices")
@@ -80,10 +96,46 @@ async function loadDashboard(): Promise<DashboardData> {
           .eq("company_id", companyId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    supabase
+      .from("invoices")
+      .select("subtotal")
+      .eq("status", "issued")
+      .gte("created_at", startOfPrevMonth.toISOString())
+      .lt("created_at", startOfMonth.toISOString()),
+    supabase
+      .from("invoices")
+      .select("subtotal, created_at")
+      .eq("status", "issued")
+      .gte("created_at", startOfSparkline.toISOString()),
+    supabase
+      .from("clients")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", startOfMonth.toISOString()),
   ]);
 
   const monthIncome = (monthRes.data ?? []).reduce((a, r) => a + Number(r.subtotal ?? 0), 0);
   const monthIva = (monthRes.data ?? []).reduce((a, r) => a + Number(r.iva_total ?? 0), 0);
+
+  const prevMonthIncome = (prevMonthRes.data ?? []).reduce(
+    (a, r) => a + Number(r.subtotal ?? 0),
+    0,
+  );
+  const incomeChangePct =
+    prevMonthIncome > 0 ? ((monthIncome - prevMonthIncome) / prevMonthIncome) * 100 : null;
+
+  const sparklineBuckets = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    return d.getFullYear() * 12 + d.getMonth();
+  });
+  const incomeSparkline = sparklineBuckets.map((key) =>
+    (sparklineRes.data ?? [])
+      .filter((r) => {
+        const d = new Date(r.created_at as string);
+        return d.getFullYear() * 12 + d.getMonth() === key;
+      })
+      .reduce((a, r) => a + Number(r.subtotal ?? 0), 0),
+  );
+
   const c = companyRes.data;
   const csdReady = !!(
     c?.csd_cer_url &&
@@ -106,6 +158,9 @@ async function loadDashboard(): Promise<DashboardData> {
     csdReady,
     hasActiveSubscription,
     stampBalance: (walletRes.data as { balance?: number } | null)?.balance ?? null,
+    incomeChangePct,
+    newClientsThisMonth: newClientsRes.count ?? 0,
+    incomeSparkline,
     facturasIncluidas: planData?.facturas_incluidas ?? null,
   };
 }
@@ -227,16 +282,58 @@ function Dashboard() {
       )}
 
       <section className="mt-6 grid grid-cols-2 gap-3 animate-reveal">
-        <div className="col-span-2 rounded-3xl border border-border bg-surface p-5 shadow-soft">
-          <p className="text-sm text-muted-foreground">Ingresos del mes</p>
-          <p className="mt-1 text-3xl font-extrabold tracking-tight">
-            {isLoading ? "—" : formatMXN(data?.monthIncome ?? 0)}
-            <span className="ml-2 align-middle text-sm font-medium text-muted-foreground">MXN</span>
-          </p>
-          <div className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <TrendingUp className="size-3.5" />
-            <span>Sin IVA · calculado en tiempo real</span>
+        <div className="col-span-2 flex items-center justify-between gap-4 rounded-3xl border border-border bg-surface p-5 shadow-soft">
+          <div className="min-w-0">
+            <p className="text-sm text-muted-foreground">Ingresos del mes</p>
+            <p className="mt-1 truncate text-3xl font-extrabold tracking-tight">
+              {isLoading ? "—" : formatMXN(data?.monthIncome ?? 0)}
+              <span className="ml-2 align-middle text-sm font-medium text-muted-foreground">
+                MXN
+              </span>
+            </p>
+            {data && data.incomeChangePct !== null ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                    data.incomeChangePct >= 0
+                      ? "bg-success/10 text-success"
+                      : "bg-destructive/10 text-destructive"
+                  }`}
+                >
+                  {data.incomeChangePct >= 0 ? (
+                    <TrendingUp className="size-3" />
+                  ) : (
+                    <TrendingDown className="size-3" />
+                  )}
+                  {data.incomeChangePct >= 0 ? "+" : ""}
+                  {data.incomeChangePct.toFixed(1)}%
+                </span>
+                <span>vs. mes anterior · Sin IVA</span>
+              </div>
+            ) : (
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <TrendingUp className="size-3.5" />
+                <span>Sin IVA · calculado en tiempo real</span>
+              </div>
+            )}
           </div>
+          {data && (
+            <div className="flex h-16 shrink-0 items-end gap-1">
+              {(() => {
+                const max = Math.max(...data.incomeSparkline, 1);
+                return data.incomeSparkline.map((v, i) => (
+                  <div
+                    key={i}
+                    className="w-2 rounded-full bg-primary-soft"
+                    style={{
+                      height: `${Math.max((v / max) * 100, 8)}%`,
+                      opacity: 0.45 + (i / (data.incomeSparkline.length - 1)) * 0.55,
+                    }}
+                  />
+                ));
+              })()}
+            </div>
+          )}
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4 shadow-soft">
           <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
@@ -250,9 +347,16 @@ function Dashboard() {
           <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
             <UsersIcon className="size-3.5" /> Clientes
           </div>
-          <p className="mt-1 text-2xl font-bold tracking-tight">
-            {isLoading ? "—" : data?.clientsCount}
-          </p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <p className="text-2xl font-bold tracking-tight">
+              {isLoading ? "—" : data?.clientsCount}
+            </p>
+            {data && data.newClientsThisMonth > 0 && (
+              <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-bold text-success">
+                +{data.newClientsThisMonth} nuevos
+              </span>
+            )}
+          </div>
         </div>
       </section>
 
@@ -301,10 +405,13 @@ function Dashboard() {
                 <button
                   type="button"
                   onClick={() => navigate({ to: "/invoices/$id", params: { id: inv.id } })}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={`Ver factura ${inv.series}-${String(inv.folio).padStart(6, "0")}`}
                 >
-                  <div className="min-w-0">
+                  <div className="grid size-11 shrink-0 place-items-center rounded-full bg-primary-soft text-primary">
+                    <Receipt className="size-[18px]" strokeWidth={1.8} />
+                  </div>
+                  <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold">
                       {inv.client_snapshot?.legal_name ?? "Cliente"}
                     </p>
@@ -313,10 +420,11 @@ function Dashboard() {
                       {formatDateMX(inv.created_at)}
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="shrink-0 text-right">
                     <p className="font-bold">{formatMXN(inv.total)}</p>
                     <StatusChip status={inv.status} />
                   </div>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                 </button>
               </li>
             ))}
