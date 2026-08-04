@@ -34,16 +34,17 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription, companyIdH
 
   let companyId = companyIdHint;
   if (!companyId) {
-    const { data: existing } = await admin
+    const { data: existing, error: lookupError } = await admin
       .from("subscriptions")
       .select("company_id")
       .eq("stripe_subscription_id", sub.id)
       .maybeSingle();
+    if (lookupError) throw new Error(`Lookup de subscriptions falló: ${lookupError.message}`);
     companyId = existing?.company_id;
   }
   if (!companyId) return null;
 
-  const { data: row } = await admin
+  const { data: row, error: upsertError } = await admin
     .from("subscriptions")
     .upsert(
       {
@@ -61,18 +62,43 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription, companyIdH
     )
     .select()
     .single();
+  if (upsertError) throw new Error(`Upsert de subscriptions falló: ${upsertError.message}`);
   return row;
 }
 
+// Stripe deprecated the top-level Invoice.subscription field in favor of
+// invoice.parent.subscription_details.subscription for API versions newer
+// than the one this SDK client is pinned to (2024-06-20) — the Stripe
+// dashboard's webhook endpoint can be configured to serialize events at the
+// account's current default version regardless of what apiVersion the SDK
+// uses for outbound calls, so the newer shape can show up here even though
+// we never asked for it. Falling back covers both.
+function subscriptionIdFromInvoice(invoice: Stripe.Invoice): string | undefined {
+  if (typeof invoice.subscription === "string") return invoice.subscription;
+  if (invoice.subscription?.id) return invoice.subscription.id;
+  const parent = (
+    invoice as unknown as {
+      parent?: { subscription_details?: { subscription?: string | { id: string } | null } };
+    }
+  ).parent;
+  const nested = parent?.subscription_details?.subscription;
+  return typeof nested === "string" ? nested : nested?.id;
+}
+
+// Postgres unique_violation — the (company_id, type, reference_id) index that
+// makes granting idempotent under Stripe's at-least-once webhook delivery.
+const UNIQUE_VIOLATION = "23505";
+
 async function grantForInvoice(invoice: Stripe.Invoice) {
-  const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+  const subId = subscriptionIdFromInvoice(invoice);
   if (!subId) return;
 
-  const { data: subRow } = await admin
+  const { data: subRow, error: subError } = await admin
     .from("subscriptions")
     .select("id, company_id, plan_id")
     .eq("stripe_subscription_id", subId)
     .maybeSingle();
+  if (subError) throw new Error(`Lookup de subscriptions falló: ${subError.message}`);
   if (!subRow) return;
 
   const priceId = invoice.lines.data[0]?.price?.id;
@@ -80,30 +106,39 @@ async function grantForInvoice(invoice: Stripe.Invoice) {
   const facturasIncluidas = plan?.facturas_incluidas;
   if (!facturasIncluidas) return;
 
-  const { data: wallet } = await admin
+  const { data: wallet, error: walletError } = await admin
     .from("stamp_wallets")
     .select("balance")
     .eq("company_id", subRow.company_id)
     .maybeSingle();
+  if (walletError) throw new Error(`Lookup de stamp_wallets falló: ${walletError.message}`);
   const currentBalance = wallet?.balance ?? 0;
 
   if (currentBalance > 0) {
-    await admin.from("stamp_transactions").insert({
+    const { error: expiryError } = await admin.from("stamp_transactions").insert({
       company_id: subRow.company_id,
       subscription_id: subRow.id,
       type: "perdida_vencimiento",
       amount: -currentBalance,
       reference_id: `${invoice.id}_expiry`,
     });
+    if (expiryError && expiryError.code !== UNIQUE_VIOLATION) {
+      throw new Error(`Insert de perdida_vencimiento falló: ${expiryError.message}`);
+    }
   }
 
-  await admin.from("stamp_transactions").insert({
+  const { error: grantError } = await admin.from("stamp_transactions").insert({
     company_id: subRow.company_id,
     subscription_id: subRow.id,
     type: "grant_renovacion",
     amount: facturasIncluidas,
     reference_id: invoice.id,
   });
+  // A unique violation here means this exact invoice was already granted —
+  // Stripe redelivered the same event, not a new payment. Treat as success.
+  if (grantError && grantError.code !== UNIQUE_VIOLATION) {
+    throw new Error(`Insert de grant_renovacion falló: ${grantError.message}`);
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -126,7 +161,10 @@ Deno.serve(async (req: Request) => {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const companyId = session.client_reference_id ?? undefined;
-        const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+        const subscriptionId =
+          typeof session.subscription === "string"
+            ? session.subscription
+            : session.subscription?.id;
         if (companyId && subscriptionId) {
           const sub = await stripe.subscriptions.retrieve(subscriptionId);
           await upsertSubscriptionFromStripe(sub, companyId);
@@ -141,7 +179,10 @@ Deno.serve(async (req: Request) => {
       }
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
-        await admin.from("subscriptions").update({ status: "canceled", updated_at: new Date().toISOString() }).eq("stripe_subscription_id", sub.id);
+        await admin
+          .from("subscriptions")
+          .update({ status: "canceled", updated_at: new Date().toISOString() })
+          .eq("stripe_subscription_id", sub.id);
         break;
       }
       case "invoice.paid": {
@@ -151,9 +192,12 @@ Deno.serve(async (req: Request) => {
       }
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
-        const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+        const subId = subscriptionIdFromInvoice(invoice);
         if (subId) {
-          await admin.from("subscriptions").update({ status: "past_due", updated_at: new Date().toISOString() }).eq("stripe_subscription_id", subId);
+          await admin
+            .from("subscriptions")
+            .update({ status: "past_due", updated_at: new Date().toISOString() })
+            .eq("stripe_subscription_id", subId);
         }
         break;
       }
@@ -162,7 +206,16 @@ Deno.serve(async (req: Request) => {
     }
     return json({ received: true }, 200);
   } catch (err) {
-    console.error("stripe-webhook error", err);
+    // Stripe retries on 5xx, but retries alone never fix a code bug — log
+    // enough (event type/id, message, stack) that a repeat failure is
+    // diagnosable straight from logs instead of reverse-engineering it from
+    // which DB rows are missing, like this one had to be.
+    console.error("stripe-webhook error", {
+      eventType: event.type,
+      eventId: event.id,
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return json({ error: "Error interno procesando el evento." }, 500);
   }
 });
