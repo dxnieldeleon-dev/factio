@@ -340,12 +340,12 @@ async function buildCfdiPayload(
       Discount: discount,
       TaxObject: taxObject,
       Taxes: taxes,
-      // Facturama's item Total is Subtotal + traslados only — retenciones
-      // never reduce it (matches the official CFDI standard: a Concepto's
-      // own amount is never adjusted for tax, only the Comprobante-level
-      // total is). Facturama computes the retention-adjusted document total
-      // itself from each item's Taxes array.
-      Total: toMoney(lineSubtotal + lineIva),
+      // Facturama's api-lite validates each item's Total as the net payable
+      // amount for that line: Subtotal + traslados - retenciones. Omitting
+      // the retention subtraction (as this used to) only surfaces once a
+      // line actually carries a nonzero retention — Facturama rejects the
+      // create call with "El cálculo del total es incorrecto."
+      Total: toMoney(lineSubtotal + lineIva - lineIsrRetencion - lineIvaRetencion),
     });
   }
 
