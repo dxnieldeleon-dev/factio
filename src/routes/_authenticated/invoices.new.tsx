@@ -58,6 +58,7 @@ interface ClientRow {
   email: string | null;
   phone: string | null;
   is_technology_platform: boolean;
+  business_category: string | null;
 }
 interface ProductRow {
   id: string;
@@ -262,7 +263,7 @@ function NewInvoice() {
         const { data } = await supabase
           .from("clients")
           .select(
-            "id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email, phone, is_technology_platform",
+            "id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email, phone, is_technology_platform, business_category",
           )
           .eq("id", resumeClientId)
           .maybeSingle();
@@ -378,6 +379,7 @@ function NewInvoice() {
             cfdi_use: receiver.cfdi_use,
             tax_regime: receiver.tax_regime,
             postal_code: receiver.postal_code,
+            business_category: client.business_category,
           },
           series: "A",
           // Assigned atomically by the database trigger.
@@ -607,7 +609,7 @@ function StepClient({ onPick }: { onPick: (c: ClientRow) => void }) {
       const { data, error } = await supabase
         .from("clients")
         .select(
-          "id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email, phone, is_technology_platform",
+          "id, legal_name, rfc, tax_regime, postal_code, cfdi_use, email, phone, is_technology_platform, business_category",
         )
         .order("is_favorite", { ascending: false })
         .order("legal_name");

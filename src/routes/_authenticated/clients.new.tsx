@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { validateRFC } from "@/lib/format";
 import { classifyRfc } from "@/lib/fiscal";
 import { taxRegimesForPersonType, type PersonType } from "@/lib/sat-catalogs";
+import { CLIENT_CATEGORIES } from "@/lib/client-categories";
 import { useQueryClient } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
 
@@ -24,6 +25,7 @@ function NewClient() {
     postal_code: "",
     email: "",
     phone: "",
+    business_category: "",
   });
   const [isTechnologyPlatform, setIsTechnologyPlatform] = useState(false);
 
@@ -89,6 +91,7 @@ function NewClient() {
           postal_code: form.postal_code.trim(),
           email: form.email.trim() || null,
           phone: form.phone.trim() || null,
+          business_category: form.business_category || null,
           is_technology_platform: isTechnologyPlatform,
         })
         .select("id")
@@ -202,6 +205,20 @@ function NewClient() {
             inputMode="tel"
             className="ff-input"
           />
+        </Field>
+        <Field label="Giro del negocio (opcional)">
+          <select
+            value={form.business_category}
+            onChange={(e) => set("business_category", e.target.value)}
+            className="ff-input"
+          >
+            <option value="">Sin clasificar</option>
+            {CLIENT_CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
         </Field>
 
         <label className="flex items-center justify-between gap-3 py-1">

@@ -13,11 +13,11 @@ import {
   ShieldAlert,
   X,
   Zap,
-  Receipt,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 import { formatMXN, formatDateMX } from "@/lib/format";
+import { clientCategoryIcon } from "@/lib/client-categories";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -34,7 +34,7 @@ interface DashboardData {
     total: number;
     status: string;
     created_at: string;
-    client_snapshot: { legal_name?: string } | null;
+    client_snapshot: { legal_name?: string; business_category?: string | null } | null;
   }>;
   businessName: string;
   csdReady: boolean;
@@ -406,34 +406,37 @@ function Dashboard() {
           </div>
         ) : data && data.recent.length > 0 ? (
           <ul className="divide-y divide-border rounded-3xl border border-border bg-surface">
-            {data.recent.map((inv) => (
-              <li key={inv.id}>
-                <button
-                  type="button"
-                  onClick={() => navigate({ to: "/invoices/$id", params: { id: inv.id } })}
-                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label={`Ver factura ${inv.series}-${String(inv.folio).padStart(6, "0")}`}
-                >
-                  <div className="grid size-11 shrink-0 place-items-center rounded-full bg-primary-soft text-primary">
-                    <Receipt className="size-[18px]" strokeWidth={1.8} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold">
-                      {inv.client_snapshot?.legal_name ?? "Cliente"}
-                    </p>
-                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-tight text-muted-foreground">
-                      {inv.series}-{String(inv.folio).padStart(6, "0")} ·{" "}
-                      {formatDateMX(inv.created_at)}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="font-bold">{formatMXN(inv.total)}</p>
-                    <StatusChip status={inv.status} />
-                  </div>
-                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                </button>
-              </li>
-            ))}
+            {data.recent.map((inv) => {
+              const CategoryIcon = clientCategoryIcon(inv.client_snapshot?.business_category);
+              return (
+                <li key={inv.id}>
+                  <button
+                    type="button"
+                    onClick={() => navigate({ to: "/invoices/$id", params: { id: inv.id } })}
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`Ver factura ${inv.series}-${String(inv.folio).padStart(6, "0")}`}
+                  >
+                    <div className="grid size-11 shrink-0 place-items-center rounded-full bg-primary-soft text-primary">
+                      <CategoryIcon className="size-[18px]" strokeWidth={1.8} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">
+                        {inv.client_snapshot?.legal_name ?? "Cliente"}
+                      </p>
+                      <p className="mt-0.5 font-mono text-[10px] uppercase tracking-tight text-muted-foreground">
+                        {inv.series}-{String(inv.folio).padStart(6, "0")} ·{" "}
+                        {formatDateMX(inv.created_at)}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-bold">{formatMXN(inv.total)}</p>
+                      <StatusChip status={inv.status} />
+                    </div>
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <div className="rounded-3xl border border-dashed border-border bg-surface px-6 py-12 text-center">

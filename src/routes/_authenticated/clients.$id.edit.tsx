@@ -5,6 +5,7 @@ import { ArrowLeft, Loader2, Star, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { validateRFC } from "@/lib/format";
 import { TAX_REGIMES, CFDI_USES } from "@/lib/sat-catalogs";
+import { CLIENT_CATEGORIES } from "@/lib/client-categories";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertDialog,
@@ -35,13 +36,14 @@ type ClientRow = {
   is_favorite: boolean;
   notes: string | null;
   is_technology_platform: boolean;
+  business_category: string | null;
 };
 
 async function loadClient(id: string): Promise<ClientRow> {
   const { data, error } = await supabase
     .from("clients")
     .select(
-      "id, rfc, legal_name, tax_regime, postal_code, cfdi_use, email, phone, is_favorite, notes, is_technology_platform",
+      "id, rfc, legal_name, tax_regime, postal_code, cfdi_use, email, phone, is_favorite, notes, is_technology_platform, business_category",
     )
     .eq("id", id)
     .maybeSingle();
@@ -97,6 +99,7 @@ function EditClient() {
           is_favorite: form.is_favorite,
           notes: form.notes?.trim() || null,
           is_technology_platform: form.is_technology_platform,
+          business_category: form.business_category,
         })
         .eq("id", id);
       if (error) throw error;
@@ -250,6 +253,20 @@ function EditClient() {
             placeholder="55 0000 0000"
             className="ff-input"
           />
+        </Field>
+        <Field label="Giro del negocio">
+          <select
+            value={form.business_category ?? ""}
+            onChange={(e) => set("business_category", e.target.value || null)}
+            className="ff-input"
+          >
+            <option value="">Sin clasificar</option>
+            {CLIENT_CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
         </Field>
 
         <label className="flex items-center justify-between gap-3 py-1">

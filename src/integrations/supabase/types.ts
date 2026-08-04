@@ -123,6 +123,7 @@ export type Database = {
       }
       clients: {
         Row: {
+          business_category: string | null
           cfdi_use: string | null
           company_id: string | null
           created_at: string
@@ -140,6 +141,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          business_category?: string | null
           cfdi_use?: string | null
           company_id?: string | null
           created_at?: string
@@ -157,6 +159,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          business_category?: string | null
           cfdi_use?: string | null
           company_id?: string | null
           created_at?: string
