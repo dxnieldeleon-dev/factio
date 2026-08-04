@@ -337,17 +337,23 @@ function Dashboard() {
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4 shadow-soft">
           <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-            <Percent className="size-3.5" /> IVA del mes
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary">
+              <Percent className="size-3.5" strokeWidth={2} />
+            </span>
+            IVA del mes
           </div>
-          <p className="mt-1 text-2xl font-bold tracking-tight">
+          <p className="mt-2 text-2xl font-bold tracking-tight">
             {isLoading ? "—" : formatMXN(data?.monthIva ?? 0)}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4 shadow-soft">
           <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-            <UsersIcon className="size-3.5" /> Clientes
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary">
+              <UsersIcon className="size-3.5" strokeWidth={2} />
+            </span>
+            Clientes
           </div>
-          <div className="mt-1 flex items-baseline gap-2">
+          <div className="mt-2 flex items-baseline gap-2">
             <p className="text-2xl font-bold tracking-tight">
               {isLoading ? "—" : data?.clientsCount}
             </p>
@@ -373,7 +379,7 @@ function Dashboard() {
       ) : (
         <Link
           to="/invoices/new"
-          className="mt-6 flex w-full animate-reveal items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background shadow-lift transition active:scale-[0.98]"
+          className="mt-6 flex w-full animate-reveal items-center justify-center gap-2 rounded-2xl bg-primary py-4 text-sm font-semibold text-primary-foreground shadow-lift transition active:scale-[0.98]"
           style={{ animationDelay: "100ms" }}
         >
           <Plus className="size-5" strokeWidth={2.4} />
