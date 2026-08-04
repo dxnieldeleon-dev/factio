@@ -18,6 +18,65 @@ import { extractPdfText } from "@/lib/pdf-text";
 import { parseConstanciaText, matchActivityProfile } from "@/lib/constancia-parser";
 import factioLogoInverted from "@/assets/factio-logo-inverted.png.asset.json";
 
+// activity_profiles.activity_category solo distingue el régimen fiscal que
+// alimenta tax_withholding_rules (ver src/lib/tax-withholding.ts) — todos los
+// perfiles de servicios comparten 'servicios_profesionales' ahí, así que no
+// separa "salud" de "profesionales". El submenú de salud de abajo es
+// puramente visual (por key) para no tocar esa columna ni las reglas de
+// retención.
+const HEALTH_PROFILE_KEYS = new Set([
+  "nutricion",
+  "psicologia",
+  "medicina_general",
+  "dentista",
+  "fisioterapia",
+]);
+
+const CATEGORY_GROUP_LABELS: Record<string, string> = {
+  actividad_empresarial_general: "Comercio y venta de productos",
+  arrendamiento: "Arrendamiento",
+  autotransporte_carga: "Autotransporte de carga",
+};
+
+const GROUP_DISPLAY_ORDER = [
+  "Servicios de salud",
+  "Servicios profesionales",
+  "Comercio y venta de productos",
+  "Arrendamiento",
+  "Autotransporte de carga",
+  "Otros",
+];
+
+type ActivityProfileOption = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  activity_category: string;
+};
+
+function groupLabelFor(profile: Pick<ActivityProfileOption, "key" | "activity_category">) {
+  if (profile.activity_category === "servicios_profesionales") {
+    return HEALTH_PROFILE_KEYS.has(profile.key) ? "Servicios de salud" : "Servicios profesionales";
+  }
+  return CATEGORY_GROUP_LABELS[profile.activity_category] ?? "Otros";
+}
+
+function groupActivityProfiles(
+  profiles: ActivityProfileOption[],
+): [string, ActivityProfileOption[]][] {
+  const groups = new Map<string, ActivityProfileOption[]>();
+  for (const p of profiles) {
+    const label = groupLabelFor(p);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label)!.push(p);
+  }
+  return GROUP_DISPLAY_ORDER.filter((label) => groups.has(label)).map((label) => [
+    label,
+    groups.get(label)!,
+  ]);
+}
+
 export const Route = createFileRoute("/onboarding")({
   ssr: false,
   beforeLoad: async () => {
@@ -47,9 +106,7 @@ function OnboardingPage() {
   const [taxRegime, setTaxRegime] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [activityProfileId, setActivityProfileId] = useState("");
-  const [activityProfiles, setActivityProfiles] = useState<
-    { id: string; name: string; description: string | null }[]
-  >([]);
+  const [activityProfiles, setActivityProfiles] = useState<ActivityProfileOption[]>([]);
   const [parsingConstancia, setParsingConstancia] = useState(false);
   const [constanciaSummary, setConstanciaSummary] = useState<string[] | null>(null);
 
@@ -78,7 +135,10 @@ function OnboardingPage() {
           )
           .eq("user_id", u.user.id)
           .maybeSingle(),
-        supabase.from("activity_profiles").select("id, name, description").order("sort_order"),
+        supabase
+          .from("activity_profiles")
+          .select("id, key, name, description, activity_category")
+          .order("sort_order"),
       ]);
       setActivityProfiles(profiles ?? []);
       if (comp) {
@@ -424,16 +484,22 @@ function OnboardingPage() {
                     onChange={(e) => setActivityProfileId(e.target.value)}
                     className={inputCls(false)}
                   >
-                    <option value="">Sin asignar</option>
-                    {activityProfiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
+                    <option value="">Mixto / No estoy seguro</option>
+                    {groupActivityProfiles(activityProfiles).map(([label, items]) => (
+                      <optgroup key={label} label={label}>
+                        {items.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                   <p className="mt-1.5 text-[11px] text-muted-foreground">
                     Nos ayuda a sugerirte claves SAT al agregar servicios y a calcular retenciones
-                    correctas en tus facturas. Puedes cambiarla después desde tu perfil.
+                    correctas en tus facturas. Puedes cambiarla después desde tu perfil. Si vendes
+                    de varias categorías o no estás seguro, deja «Mixto / No estoy seguro» — no
+                    bloquea continuar.
                   </p>
                 </Field>
               </div>

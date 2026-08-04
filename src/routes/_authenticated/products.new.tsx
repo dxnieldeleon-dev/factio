@@ -71,6 +71,11 @@ function NewProduct() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
   const hasProfile = serviceTypes.length > 0;
+  // Los perfiles de comercio (activity_category = 'actividad_empresarial_general')
+  // no traen activity_profile_service_types precargados a propósito — la
+  // variedad de productos es demasiado amplia para un catálogo curado — así
+  // que en vez de sugerencias rápidas, se abre directo el buscador de Clave SAT.
+  const [isCommerceProfile, setIsCommerceProfile] = useState(false);
   const [kind, setKind] = useState<"servicio" | "producto">("servicio");
   const [serviceTypeId, setServiceTypeId] = useState<string>("");
 
@@ -89,13 +94,21 @@ function NewProduct() {
         .eq("user_id", userData.user.id)
         .maybeSingle();
       if (company?.activity_profile_id) {
-        const { data: types } = await supabase
-          .from("activity_profile_service_types")
-          .select("id, name, sat_key, sat_unit")
-          .eq("activity_profile_id", company.activity_profile_id)
-          .eq("is_active", true)
-          .order("sort_order");
+        const [{ data: types }, { data: profile }] = await Promise.all([
+          supabase
+            .from("activity_profile_service_types")
+            .select("id, name, sat_key, sat_unit")
+            .eq("activity_profile_id", company.activity_profile_id)
+            .eq("is_active", true)
+            .order("sort_order"),
+          supabase
+            .from("activity_profiles")
+            .select("activity_category")
+            .eq("id", company.activity_profile_id)
+            .maybeSingle(),
+        ]);
         setServiceTypes(types ?? []);
+        setIsCommerceProfile(profile?.activity_category === "actividad_empresarial_general");
       }
       setProfileLoading(false);
     })();
@@ -337,7 +350,11 @@ function NewProduct() {
             </Field>
             <Field
               label="Clave SAT"
-              hint="Describe qué vendes; el SAT usa este código para clasificarlo. Si no encuentras algo parecido, usa «No existe en el catálogo»."
+              hint={
+                isCommerceProfile
+                  ? "Busca tu producto en el catálogo SAT."
+                  : "Describe qué vendes; el SAT usa este código para clasificarlo. Si no encuentras algo parecido, usa «No existe en el catálogo»."
+              }
             >
               <SatKeyPicker
                 value={form.sat_key}
