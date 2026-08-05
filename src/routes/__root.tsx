@@ -151,8 +151,18 @@ function RootComponent() {
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      // Query keys (["dashboard"], ["profile"], ["invoices","history"], etc.)
+      // aren't scoped by user/company id, so leaving the cache alone on
+      // sign-out — as this used to — meant the next account to sign in on
+      // the same tab would flash (or keep showing) the previous account's
+      // cached data until each query happened to refetch. A full clear on
+      // every sign-in/out transition guarantees no cross-account bleed.
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
+        queryClient.clear();
+      } else {
+        queryClient.invalidateQueries();
+      }
       router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
     });
     return () => {
       data.subscription.unsubscribe();
