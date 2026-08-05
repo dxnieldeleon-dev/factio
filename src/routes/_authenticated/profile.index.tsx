@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, ChevronRight, CreditCard, KeyRound, Loader2, LogOut, Settings, ShieldCheck, Zap } from "lucide-react";
+import { Building2, ChevronRight, CreditCard, KeyRound, Loader2, LogOut, Mail, Settings, ShieldCheck, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { isCsdConfigured, loadCompanyProfile } from "@/features/profile/company-profile";
@@ -87,6 +87,9 @@ function Profile() {
     </section>
 
     <section className="mt-8 space-y-2"><h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cuenta</h2><ProfileLink to="/settings" icon={Settings} title="Configuración" subtitle="Notificaciones, tema, biometría" /><button type="button" onClick={signOut} className="flex w-full items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 text-left transition active:scale-[0.99]"><div className="grid size-10 place-items-center rounded-xl bg-destructive/10 text-destructive"><LogOut className="size-4" /></div><div className="flex-1"><p className="font-semibold">Cerrar sesión</p><p className="text-xs text-muted-foreground">Salir de Factio</p></div></button></section>
+
+    <section className="mt-8 space-y-2"><h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ayuda</h2><a href="mailto:soporte@factio.mx" className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 transition active:scale-[0.99]"><div className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary"><Mail className="size-4" /></div><div className="flex-1"><p className="font-semibold">Soporte</p><p className="text-xs text-muted-foreground">soporte@factio.mx</p></div><ChevronRight className="size-4 text-muted-foreground/70" /></a></section>
+
     <p className="mt-6 flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground"><ShieldCheck className="size-3" />Tus datos viajan cifrados y solo tú los ves.</p>
   </div>;
 }
