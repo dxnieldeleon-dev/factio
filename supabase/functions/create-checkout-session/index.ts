@@ -15,7 +15,7 @@ const isTestMode = stripeSecretKey.startsWith("sk_test_");
 const priceColumn = isTestMode ? "stripe_price_id_test" : "stripe_price_id";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": appUrl,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 

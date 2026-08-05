@@ -18,8 +18,9 @@ import {
 } from "../_shared/facturama/errors.ts";
 import { resolveTaxTreatment } from "../_shared/tax/withholding.ts";
 
+const allowedOrigin = Deno.env.get("APP_URL") ?? "https://factio.lovable.app";
 const cors = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": allowedOrigin,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
