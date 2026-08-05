@@ -84,6 +84,7 @@ async function loadDashboard(): Promise<DashboardData> {
     supabase
       .from("invoices")
       .select("id, series, folio, total, status, created_at, client_snapshot")
+      .neq("status", "draft")
       .order("created_at", { ascending: false })
       .limit(5),
     companyId

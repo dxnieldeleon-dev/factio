@@ -117,7 +117,9 @@ function InvoiceDetail() {
   const [savingTaxes, setSavingTaxes] = useState(false);
 
   const folioFmt = data
-    ? `${data.invoice.series}-${String(data.invoice.folio).padStart(6, "0")}`
+    ? data.invoice.status === "draft"
+      ? "Borrador"
+      : `${data.invoice.series}-${String(data.invoice.folio).padStart(6, "0")}`
     : "";
 
   async function sendWhatsApp() {

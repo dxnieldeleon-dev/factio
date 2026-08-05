@@ -57,7 +57,7 @@ function History() {
   const [status, setStatus] = useState<StatusFilter>("all");
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [draftToDelete, setDraftToDelete] = useState<{ id: string; folioFmt: string } | null>(null);
+  const [draftToDelete, setDraftToDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const { data: isAdmin } = useQuery({
@@ -97,7 +97,7 @@ function History() {
       const { error } = await supabase
         .from("invoices")
         .delete()
-        .eq("id", draftToDelete.id)
+        .eq("id", draftToDelete)
         .eq("status", "draft");
       if (error) throw error;
       toast.success("Borrador eliminado");
@@ -208,8 +208,10 @@ function History() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold">{snap.legal_name ?? "Cliente"}</p>
                       <p className="mt-0.5 font-mono text-[10px] uppercase text-muted-foreground">
-                        {inv.series}-{String(inv.folio).padStart(6, "0")} ·{" "}
-                        {formatDateMX(inv.created_at)}
+                        {inv.status === "draft"
+                          ? "Borrador"
+                          : `${inv.series}-${String(inv.folio).padStart(6, "0")}`}{" "}
+                        · {formatDateMX(inv.created_at)}
                         {snap.rfc ? ` · ${snap.rfc}` : ""}
                       </p>
                     </div>
@@ -263,10 +265,7 @@ function History() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setDraftToDelete({
-                            id: inv.id,
-                            folioFmt: `${inv.series}-${String(inv.folio).padStart(6, "0")}`,
-                          });
+                          setDraftToDelete(inv.id);
                         }}
                         className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/5 px-3 py-1 text-[11px] font-semibold text-destructive"
                       >
@@ -286,8 +285,8 @@ function History() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar este borrador?</AlertDialogTitle>
             <AlertDialogDescription>
-              {draftToDelete?.folioFmt} se eliminará por completo. Esta acción no se puede deshacer.
-              Solo se pueden eliminar borradores — las facturas ya timbradas no se pueden borrar, se
+              Este borrador se eliminará por completo. Esta acción no se puede deshacer. Solo se
+              pueden eliminar borradores — las facturas ya timbradas no se pueden borrar, se
               cancelan.
             </AlertDialogDescription>
           </AlertDialogHeader>
