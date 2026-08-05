@@ -1395,6 +1395,7 @@ function StepSuccess({
         result.pdfUrl,
         `Factura ${folioFmt} por ${formatMXN(total)}`,
         clientPhone,
+        `Factura-${folioFmt}.pdf`,
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No pudimos preparar el envío");

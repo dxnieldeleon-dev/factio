@@ -28,19 +28,47 @@ export async function openInvoiceDocument(pathOrUrl: string) {
 }
 
 /**
- * Opens WhatsApp with a message linking to the invoice PDF. The link needs
- * to survive until the recipient actually opens it (not just the sender),
- * so it uses a much longer signed-URL expiry than openInvoiceDocument.
+ * Shares the invoice PDF on WhatsApp. Prefers the OS-native share sheet
+ * (Web Share API with an actual File) so WhatsApp receives the PDF as a
+ * real attachment — a wa.me link can only ever carry text, never a file,
+ * which is why the old implementation could only send a link to the PDF
+ * instead of the PDF itself.
  *
- * Opens a blank tab synchronously (before the await) and redirects it once
- * the signed URL resolves — otherwise the async gap loses the click's user
- * gesture and browsers block the popup.
+ * Falls back to the wa.me link (opened via a synchronously pre-opened tab,
+ * so the click's user gesture survives the async signed-URL fetch) when the
+ * native share sheet isn't available at all, e.g. most desktop browsers.
  */
 export async function shareInvoiceOnWhatsApp(
   pdfPathOrUrl: string,
   message: string,
   phone?: string | null,
+  fileName = "factura.pdf",
 ) {
+  const canTryNativeShare =
+    typeof navigator !== "undefined" &&
+    typeof navigator.share === "function" &&
+    typeof navigator.canShare === "function";
+
+  if (canTryNativeShare) {
+    try {
+      const url = await resolveInvoiceDocumentUrl(pdfPathOrUrl, 60 * 10);
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("No fue posible descargar el PDF para compartir.");
+      const blob = await response.blob();
+      const file = new File([blob], fileName, { type: "application/pdf" });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], text: message });
+        return;
+      }
+    } catch (err) {
+      // User closing the native share sheet is not an error — nothing to
+      // fall back to, that was the user's choice.
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      // Any other failure (unsupported file type, fetch error, etc.) falls
+      // through to the wa.me link below.
+    }
+  }
+
   const popup = window.open("", "_blank", "noopener,noreferrer");
   try {
     const url = await resolveInvoiceDocumentUrl(pdfPathOrUrl, 60 * 60 * 24);

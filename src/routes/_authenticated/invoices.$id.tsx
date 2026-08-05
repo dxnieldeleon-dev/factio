@@ -130,6 +130,7 @@ function InvoiceDetail() {
         data.invoice.pdf_url,
         `Factura ${folioFmt} por ${formatMXN(data.invoice.total)}`,
         data.invoice.clients?.phone,
+        `Factura-${folioFmt}.pdf`,
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No pudimos preparar el envío");
