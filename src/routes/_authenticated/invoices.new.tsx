@@ -701,6 +701,11 @@ function StepItems({
   onNext: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Un producto agregado desde el catálogo ya trae sus datos fiscales
+  // correctos, así que se muestra colapsado (solo nombre, cantidad y
+  // subtotal) y no obliga a revisar clave SAT/unidad/IVA cada vez. Un
+  // concepto manual sí necesita esos datos, así que se abre expandido.
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const { data: products } = useQuery({
     queryKey: ["products", "picker"],
     queryFn: async () => {
@@ -737,6 +742,7 @@ function StepItems({
   }
 
   function addManual() {
+    setExpandedIdx(items.length);
     setItems([
       ...items,
       {
@@ -761,119 +767,159 @@ function StepItems({
 
   function remove(idx: number) {
     setItems(items.filter((_, i) => i !== idx));
+    setExpandedIdx((cur) => (cur === null ? null : cur === idx ? null : cur > idx ? cur - 1 : cur));
   }
 
   return (
     <div className="space-y-3">
-      {items.map((it, idx) => (
-        <div key={idx} className="rounded-2xl border border-border bg-surface p-4">
-          <div className="flex items-start justify-between gap-2">
-            <input
-              value={it.description}
-              onChange={(e) => update(idx, { description: e.target.value })}
-              placeholder="Descripción"
-              className="flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground"
-            />
+      {items.map((it, idx) =>
+        idx !== expandedIdx ? (
+          <div
+            key={idx}
+            className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">
+                {it.description || "Sin descripción"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {it.quantity} × {formatMXN(it.unit_price)}
+              </p>
+            </div>
+            <span className="shrink-0 text-sm font-bold">
+              {formatMXN(it.quantity * it.unit_price - it.discount)}
+            </span>
+            <button
+              onClick={() => setExpandedIdx(idx)}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <Pencil className="size-4" />
+            </button>
             <button
               onClick={() => remove(idx)}
-              className="text-muted-foreground hover:text-destructive"
+              className="shrink-0 text-muted-foreground hover:text-destructive"
             >
               <Trash2 className="size-4" />
             </button>
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <Mini label="Cant.">
+        ) : (
+          <div key={idx} className="rounded-2xl border border-border bg-surface p-4">
+            <div className="flex items-start justify-between gap-2">
               <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={it.quantity}
-                onChange={(e) => update(idx, { quantity: Number(e.target.value) })}
-                onFocus={(e) => e.target.select()}
-                className="ff-mini"
+                value={it.description}
+                onChange={(e) => update(idx, { description: e.target.value })}
+                placeholder="Descripción"
+                className="flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground"
               />
-            </Mini>
-            <Mini label="Precio">
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={it.unit_price}
-                onChange={(e) => update(idx, { unit_price: Number(e.target.value) })}
-                onFocus={(e) => e.target.select()}
-                className="ff-mini"
-              />
-            </Mini>
-            <Mini label="Desc.">
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={it.discount}
-                onChange={(e) => update(idx, { discount: Number(e.target.value) })}
-                onFocus={(e) => e.target.select()}
-                className="ff-mini"
-              />
-            </Mini>
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            <Mini label="Clave SAT">
-              <select
-                value={it.sat_key}
-                onChange={(e) => update(idx, { sat_key: e.target.value })}
-                className="ff-mini"
-              >
-                {COMMON_SAT_KEYS.map((k) => (
-                  <option key={k.code} value={k.code}>
-                    {k.code}
-                  </option>
-                ))}
-              </select>
-            </Mini>
-            <Mini label="Unidad">
-              <select
-                value={it.sat_unit}
-                onChange={(e) => update(idx, { sat_unit: e.target.value })}
-                className="ff-mini"
-              >
-                {COMMON_SAT_UNITS.map((u) => (
-                  <option key={u.code} value={u.code}>
-                    {u.code}
-                  </option>
-                ))}
-              </select>
-            </Mini>
-            <Mini label="IVA">
-              {it.tax_object === "01" ? (
-                <p className="ff-mini flex items-center text-muted-foreground">No objeto</p>
-              ) : (
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  onClick={() => setExpandedIdx(null)}
+                  className="text-xs font-semibold text-primary"
+                >
+                  Listo
+                </button>
+                <button
+                  onClick={() => remove(idx)}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <Mini label="Cant.">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={it.quantity}
+                  onChange={(e) => update(idx, { quantity: Number(e.target.value) })}
+                  onFocus={(e) => e.target.select()}
+                  className="ff-mini"
+                />
+              </Mini>
+              <Mini label="Precio">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={it.unit_price}
+                  onChange={(e) => update(idx, { unit_price: Number(e.target.value) })}
+                  onFocus={(e) => e.target.select()}
+                  className="ff-mini"
+                />
+              </Mini>
+              <Mini label="Desc.">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={it.discount}
+                  onChange={(e) => update(idx, { discount: Number(e.target.value) })}
+                  onFocus={(e) => e.target.select()}
+                  className="ff-mini"
+                />
+              </Mini>
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <Mini label="Clave SAT">
                 <select
-                  value={it.iva_rate}
-                  onChange={(e) => update(idx, { iva_rate: Number(e.target.value) })}
+                  value={it.sat_key}
+                  onChange={(e) => update(idx, { sat_key: e.target.value })}
                   className="ff-mini"
                 >
-                  <option value={0.16}>16%</option>
-                  <option value={0.08}>8%</option>
-                  <option value={0}>0%</option>
+                  {COMMON_SAT_KEYS.map((k) => (
+                    <option key={k.code} value={k.code}>
+                      {k.code}
+                    </option>
+                  ))}
                 </select>
-              )}
-            </Mini>
+              </Mini>
+              <Mini label="Unidad">
+                <select
+                  value={it.sat_unit}
+                  onChange={(e) => update(idx, { sat_unit: e.target.value })}
+                  className="ff-mini"
+                >
+                  {COMMON_SAT_UNITS.map((u) => (
+                    <option key={u.code} value={u.code}>
+                      {u.code}
+                    </option>
+                  ))}
+                </select>
+              </Mini>
+              <Mini label="IVA">
+                {it.tax_object === "01" ? (
+                  <p className="ff-mini flex items-center text-muted-foreground">No objeto</p>
+                ) : (
+                  <select
+                    value={it.iva_rate}
+                    onChange={(e) => update(idx, { iva_rate: Number(e.target.value) })}
+                    className="ff-mini"
+                  >
+                    <option value={0.16}>16%</option>
+                    <option value={0.08}>8%</option>
+                    <option value={0}>0%</option>
+                  </select>
+                )}
+              </Mini>
+            </div>
+            {(it.isr_retencion_rate !== null || it.iva_retencion_rate !== null) && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Retención fija de este producto: ISR {formatPct((it.isr_retencion_rate ?? 0) * 100)}{" "}
+                · IVA {formatPct((it.iva_retencion_rate ?? 0) * 100)}
+                {clientType === "persona_fisica" && " (no aplica: el receptor es persona física)"}
+              </p>
+            )}
+            <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+              <span className="text-xs text-muted-foreground">Importe</span>
+              <span className="font-bold">
+                {formatMXN(it.quantity * it.unit_price - it.discount)}
+              </span>
+            </div>
           </div>
-          {(it.isr_retencion_rate !== null || it.iva_retencion_rate !== null) && (
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              Retención fija de este producto: ISR {formatPct((it.isr_retencion_rate ?? 0) * 100)} ·
-              IVA {formatPct((it.iva_retencion_rate ?? 0) * 100)}
-              {clientType === "persona_fisica" && " (no aplica: el receptor es persona física)"}
-            </p>
-          )}
-          <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
-            <span className="text-xs text-muted-foreground">Importe</span>
-            <span className="font-bold">
-              {formatMXN(it.quantity * it.unit_price - it.discount)}
-            </span>
-          </div>
-        </div>
-      ))}
+        ),
+      )}
 
       {open ? (
         <div className="rounded-2xl border border-border bg-surface p-3">
