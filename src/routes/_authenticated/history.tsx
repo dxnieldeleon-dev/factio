@@ -16,7 +16,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
 import { formatMXN, formatDateMX } from "@/lib/format";
-import { openInvoiceDocument } from "@/lib/invoice-documents";
+import { openInvoiceDocument, shareInvoiceOnWhatsApp } from "@/lib/invoice-documents";
 import { StatusChip } from "./dashboard";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -248,17 +248,31 @@ function History() {
                         <Download className="size-3" /> XML
                       </button>
                     )}
-                    {(inv.pdf_url || inv.xml_url) && (
-                      <a
-                        href={`https://wa.me/?text=${encodeURIComponent(
-                          `Factura ${inv.series}-${String(inv.folio).padStart(6, "0")} por ${formatMXN(inv.total)}${inv.pdf_url ? `\n${inv.pdf_url}` : ""}`,
-                        )}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    {inv.pdf_url && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const folioFmt =
+                            inv.status === "draft"
+                              ? "Borrador"
+                              : `${inv.series}-${String(inv.folio).padStart(6, "0")}`;
+                          shareInvoiceOnWhatsApp(
+                            inv.pdf_url!,
+                            `Factura ${folioFmt} por ${formatMXN(inv.total)}`,
+                            null,
+                            `Factura-${folioFmt}.pdf`,
+                          ).catch((error) =>
+                            toast.error(
+                              error instanceof Error
+                                ? error.message
+                                : "No pudimos preparar el envío",
+                            ),
+                          );
+                        }}
                         className="inline-flex items-center gap-1.5 rounded-full bg-[#25D366] px-3 py-1 text-[11px] font-semibold text-white"
                       >
                         <Share2 className="size-3" /> WhatsApp
-                      </a>
+                      </button>
                     )}
                     {inv.status === "draft" && (
                       <button
