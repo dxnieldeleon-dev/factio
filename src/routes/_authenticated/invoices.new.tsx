@@ -17,6 +17,8 @@ import {
   AlertCircle,
   Pencil,
   Save,
+  Package,
+  Folder,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
@@ -70,6 +72,8 @@ interface ProductRow {
   tax_object: string;
   isr_retencion_rate: number | null;
   iva_retencion_rate: number | null;
+  category: string | null;
+  image_url: string | null;
 }
 interface LineItem {
   sat_key: string;
@@ -703,7 +707,7 @@ function StepItems({
       const { data, error } = await supabase
         .from("products")
         .select(
-          "id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object, isr_retencion_rate, iva_retencion_rate",
+          "id, description, sat_key, sat_unit, unit_price, iva_rate, tax_object, isr_retencion_rate, iva_retencion_rate, category, image_url",
         )
         .eq("is_active", true)
         .order("description");
@@ -881,11 +885,26 @@ function StepItems({
               <button
                 key={p.id}
                 onClick={() => addProduct(p)}
-                className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left hover:bg-accent"
+                className="flex w-full items-center gap-3 rounded-2xl border border-border bg-background p-2.5 text-left transition-colors hover:bg-accent"
               >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{p.description}</p>
-                  <p className="font-mono text-[10px] text-muted-foreground">SAT {p.sat_key}</p>
+                <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-muted">
+                  {p.image_url ? (
+                    <img src={p.image_url} alt={p.description} className="size-full object-cover" />
+                  ) : (
+                    <Package className="size-5 text-muted-foreground/60" strokeWidth={1.4} />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{p.description}</p>
+                  {p.category ? (
+                    <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
+                      <Folder className="size-3 shrink-0" /> {p.category}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 truncate font-mono text-[10px] uppercase text-muted-foreground">
+                      SAT {p.sat_key} · {p.sat_unit}
+                    </p>
+                  )}
                 </div>
                 <span className="shrink-0 text-sm font-bold">{formatMXN(p.unit_price)}</span>
               </button>
