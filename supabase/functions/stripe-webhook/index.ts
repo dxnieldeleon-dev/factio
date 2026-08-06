@@ -31,6 +31,19 @@ async function getPlanByPriceId(priceId: string) {
 async function upsertSubscriptionFromStripe(sub: Stripe.Subscription, companyIdHint?: string) {
   const priceId = sub.items.data[0]?.price?.id;
   const plan = priceId ? await getPlanByPriceId(priceId) : null;
+  if (priceId && !plan) {
+    // No debería pasar con nuestros propios planes: indica que el price_id
+    // de Stripe no existe en `plans` (p. ej. se cambió el precio en el
+    // dashboard de Stripe sin actualizar la tabla). En un upsert esto deja
+    // plan_id fuera del payload — para una fila nueva, la columna NOT NULL
+    // lo rechaza (falla fuerte, correcto); para una fila existente, el
+    // UPDATE simplemente no toca plan_id (silencioso). Cualquiera de los
+    // dos casos merece quedar en el log en vez de adivinarse después.
+    console.error("stripe-webhook: price_id de suscripción sin plan asociado", {
+      subscriptionId: sub.id,
+      priceId,
+    });
+  }
 
   let companyId = companyIdHint;
   if (!companyId) {
@@ -104,7 +117,19 @@ async function grantForInvoice(invoice: Stripe.Invoice) {
   const priceId = invoice.lines.data[0]?.price?.id;
   const plan = priceId ? await getPlanByPriceId(priceId) : null;
   const facturasIncluidas = plan?.facturas_incluidas;
-  if (!facturasIncluidas) return;
+  if (!facturasIncluidas) {
+    // Sin este log, este caso quedaba en silencio total: la función
+    // regresaba 200 (Stripe nunca reintenta un 200), así que un pago real
+    // sin plan resoluble se traducía en cero timbres otorgados y nada en
+    // ningún lado que lo señalara — así fue como se tuvo que detectar y
+    // corregir a mano la última vez.
+    console.error("stripe-webhook: factura pagada sin plan resoluble, no se otorgaron timbres", {
+      invoiceId: invoice.id,
+      subscriptionId: subId,
+      priceId,
+    });
+    return;
+  }
 
   const { data: wallet, error: walletError } = await admin
     .from("stamp_wallets")
@@ -166,7 +191,14 @@ Deno.serve(async (req: Request) => {
             ? session.subscription
             : session.subscription?.id;
         if (companyId && subscriptionId) {
-          const sub = await stripe.subscriptions.retrieve(subscriptionId);
+          let sub: Stripe.Subscription;
+          try {
+            sub = await stripe.subscriptions.retrieve(subscriptionId);
+          } catch (stripeErr) {
+            throw new Error(
+              `No se pudo obtener de Stripe la suscripción ${subscriptionId}: ${(stripeErr as Error).message}`,
+            );
+          }
           await upsertSubscriptionFromStripe(sub, companyId);
         }
         break;
