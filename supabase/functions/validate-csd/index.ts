@@ -11,6 +11,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import forge from "npm:node-forge@1.3.1";
 import { uploadCsd, updateCsd } from "../_shared/facturama/client.ts";
 import { isFacturamaError, userFacingPacMessage } from "../_shared/facturama/errors.ts";
+import { notify } from "../_shared/notify.ts";
 
 const allowedOrigin = Deno.env.get("APP_URL") ?? "https://factio.lovable.app";
 const cors = {
@@ -308,6 +309,17 @@ Deno.serve(async (req) => {
       502,
     );
   }
+
+  // Nunca se incluye la contraseña ni el contenido del .key/.cer aquí — solo
+  // metadatos públicos del certificado (número de serie, vigencia).
+  await notify(supabase, {
+    user_id: authData.user.id,
+    kind: "csd_uploaded",
+    title: "CSD cargado con éxito",
+    body: `Tu certificado de sello digital quedó vigente hasta el ${new Date(validation.validTo).toLocaleDateString("es-MX")}.`,
+    link: "/profile/csd",
+    metadata: { company_id: company.id, serial_number: validation.serialNumber },
+  });
 
   return json({
     success: true,

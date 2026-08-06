@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Stripe from "npm:stripe@17";
+import { notify } from "../_shared/notify.ts";
 
 const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY")!;
 const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
@@ -22,10 +23,78 @@ function json(body: unknown, status: number) {
 async function getPlanByPriceId(priceId: string) {
   const { data } = await admin
     .from("plans")
-    .select("id, facturas_incluidas")
+    .select("id, nombre, facturas_incluidas")
     .or(`stripe_price_id.eq.${priceId},stripe_price_id_test.eq.${priceId}`)
     .maybeSingle();
   return data;
+}
+
+async function resolveUserIdForCompany(companyId: string): Promise<string | null> {
+  const { data, error } = await admin
+    .from("companies")
+    .select("user_id")
+    .eq("id", companyId)
+    .maybeSingle();
+  if (error) {
+    console.error("stripe-webhook: no se pudo resolver user_id de company", {
+      companyId,
+      error: error.message,
+    });
+    return null;
+  }
+  return data?.user_id ?? null;
+}
+
+function formatAmount(amountCents: number, currency: string | null | undefined): string {
+  const amount = amountCents / 100;
+  try {
+    return amount.toLocaleString("es-MX", {
+      style: "currency",
+      currency: (currency ?? "mxn").toUpperCase(),
+    });
+  } catch {
+    return `$${amount.toFixed(2)} ${(currency ?? "MXN").toUpperCase()}`;
+  }
+}
+
+// Compara el estado de la suscripción antes/después de este upsert para
+// notificar solo transiciones reales — nunca en la sincronización inicial
+// (existing === null, p. ej. el primer checkout), donde "cambió" no
+// significa nada porque no había nada antes.
+async function notifySubscriptionChange(
+  companyId: string,
+  existing: { status: string; plan_id: string | null } | null,
+  updated: { status: string; plan_id: string | null },
+  plan: { nombre: string; facturas_incluidas: number } | null,
+) {
+  const paymentRecovered = existing?.status === "past_due" && updated.status === "active";
+  const planChanged =
+    existing?.plan_id != null && updated.plan_id != null && existing.plan_id !== updated.plan_id;
+  if (!paymentRecovered && !planChanged) return;
+
+  const userId = await resolveUserIdForCompany(companyId);
+  if (!userId) return;
+
+  if (paymentRecovered) {
+    await notify(admin, {
+      user_id: userId,
+      kind: "payment_recovered",
+      title: "Pago recibido, tu suscripción está activa",
+      body: "Tu método de pago se procesó correctamente y tu suscripción sigue activa.",
+      link: "/profile",
+    });
+  }
+
+  if (planChanged && plan) {
+    await notify(admin, {
+      user_id: userId,
+      kind: "plan_changed",
+      title: `Tu plan cambió a ${plan.nombre}`,
+      body: `Tu nuevo plan incluye ${plan.facturas_incluidas} facturas por periodo.`,
+      link: "/profile",
+      metadata: { plan_id: updated.plan_id },
+    });
+  }
 }
 
 async function upsertSubscriptionFromStripe(sub: Stripe.Subscription, companyIdHint?: string) {
@@ -45,14 +114,27 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription, companyIdH
     });
   }
 
+  // El estado previo (antes de este upsert) hace falta no solo para
+  // resolver companyId cuando falta, sino para poder comparar y detectar
+  // transiciones que ameritan notificar (pago recuperado, cambio de plan).
   let companyId = companyIdHint;
-  if (!companyId) {
-    const { data: existing, error: lookupError } = await admin
+  let existing: { company_id: string; status: string; plan_id: string | null } | null = null;
+  if (companyId) {
+    const { data, error } = await admin
       .from("subscriptions")
-      .select("company_id")
+      .select("company_id, status, plan_id")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (error) throw new Error(`Lookup de subscriptions falló: ${error.message}`);
+    existing = data;
+  } else {
+    const { data, error } = await admin
+      .from("subscriptions")
+      .select("company_id, status, plan_id")
       .eq("stripe_subscription_id", sub.id)
       .maybeSingle();
-    if (lookupError) throw new Error(`Lookup de subscriptions falló: ${lookupError.message}`);
+    if (error) throw new Error(`Lookup de subscriptions falló: ${error.message}`);
+    existing = data;
     companyId = existing?.company_id;
   }
   if (!companyId) return null;
@@ -76,6 +158,8 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription, companyIdH
     .select()
     .single();
   if (upsertError) throw new Error(`Upsert de subscriptions falló: ${upsertError.message}`);
+
+  await notifySubscriptionChange(companyId, existing, row, plan);
   return row;
 }
 
@@ -226,10 +310,30 @@ Deno.serve(async (req: Request) => {
         const invoice = event.data.object as Stripe.Invoice;
         const subId = subscriptionIdFromInvoice(invoice);
         if (subId) {
-          await admin
+          const { data: updatedSub, error: updateError } = await admin
             .from("subscriptions")
             .update({ status: "past_due", updated_at: new Date().toISOString() })
-            .eq("stripe_subscription_id", subId);
+            .eq("stripe_subscription_id", subId)
+            .select("company_id")
+            .maybeSingle();
+          if (updateError) {
+            console.error("stripe-webhook: no se pudo marcar past_due", {
+              subId,
+              error: updateError.message,
+            });
+          } else if (updatedSub?.company_id) {
+            const userId = await resolveUserIdForCompany(updatedSub.company_id);
+            if (userId) {
+              await notify(admin, {
+                user_id: userId,
+                kind: "payment_failed",
+                title: "Pago de suscripción fallido",
+                body: `No pudimos cobrar ${formatAmount(invoice.amount_due, invoice.currency)}. Actualiza tu método de pago para no perder acceso a la facturación.`,
+                link: "/profile",
+                metadata: { invoice_id: invoice.id, amount_due: invoice.amount_due },
+              });
+            }
+          }
         }
         break;
       }

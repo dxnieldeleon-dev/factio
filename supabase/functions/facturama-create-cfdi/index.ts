@@ -18,6 +18,7 @@ import {
   userFacingPacMessage,
 } from "../_shared/facturama/errors.ts";
 import { resolveTaxTreatment } from "../_shared/tax/withholding.ts";
+import { notify } from "../_shared/notify.ts";
 
 const allowedOrigin = Deno.env.get("APP_URL") ?? "https://factio.lovable.app";
 const cors = {
@@ -807,6 +808,26 @@ Deno.serve(async (req) => {
       );
     }
 
+    // El folio real solo se conoce hasta que finalize_cfdi_stamp lo asigna
+    // (nunca antes, ver 20260804230000_folio_only_on_issue.sql), así que se
+    // relee aquí para poder mostrarlo en el título de la notificación.
+    const { data: stampedInvoice } = await supabase
+      .from("invoices")
+      .select("series, folio")
+      .eq("id", invoiceId)
+      .maybeSingle();
+    const folioLabel = stampedInvoice
+      ? `${stampedInvoice.series}-${String(stampedInvoice.folio).padStart(6, "0")}`
+      : null;
+    await notify(supabase, {
+      user_id: user.id,
+      kind: "invoice_stamped",
+      title: folioLabel ? `Factura ${folioLabel} timbrada` : "Factura timbrada",
+      body: "Tu comprobante fiscal ya está disponible para descargar y compartir.",
+      link: `/invoices/${invoiceId}`,
+      metadata: { invoice_id: invoiceId, uuid },
+    });
+
     return json({
       ok: true,
       stamped: true,
@@ -829,6 +850,28 @@ Deno.serve(async (req) => {
       // duplicar el CFDI ante el SAT. Queda para reconciliación manual/auto.
       await markStampForReconciliation(user, invoiceId, error, cfdiId);
     }
+
+    // Resumen legible del error, nunca el código/mensaje crudo del PAC —
+    // userFacingPacMessage ya filtra su nombre y sus mensajes de infra 5xx;
+    // los de CfdiWorkflowError ya son texto propio, así que se pasan tal cual.
+    const errorSummary = isFacturamaError(error)
+      ? userFacingPacMessage(
+          error,
+          "Ocurrió un problema técnico al timbrar. Intenta de nuevo en unos minutos.",
+        )
+      : isCfdiWorkflowError(error)
+        ? error.message
+        : "No se pudo completar el timbrado. Intenta de nuevo o contacta a soporte.";
+    const series = asText(context.invoice.series);
+    await notify(supabase, {
+      user_id: user.id,
+      kind: "invoice_stamp_error",
+      title: series ? `No se pudo timbrar la factura ${series}` : "No se pudo timbrar la factura",
+      body: errorSummary,
+      link: `/invoices/${invoiceId}`,
+      metadata: { invoice_id: invoiceId },
+    });
+
     return integrationErrorResponse(error);
   }
 });

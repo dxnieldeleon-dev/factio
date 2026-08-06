@@ -4,6 +4,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cancelCfdi, getCfdi } from "../_shared/facturama/client.ts";
 import { isFacturamaError, userFacingPacMessage } from "../_shared/facturama/errors.ts";
+import { notify } from "../_shared/notify.ts";
 
 const allowedOrigin = Deno.env.get("APP_URL") ?? "https://factio.lovable.app";
 const cors = {
@@ -67,7 +68,7 @@ Deno.serve(async (req) => {
   });
   const { data: invoice, error: invoiceError } = await supabase
     .from("invoices")
-    .select("id, user_id, status, uuid_fiscal, pac_response")
+    .select("id, user_id, status, uuid_fiscal, pac_response, series, folio")
     .eq("id", payload.invoice_id)
     .eq("user_id", authData.user.id)
     .maybeSingle();
@@ -75,6 +76,7 @@ Deno.serve(async (req) => {
   if (invoice.status !== "issued" || !invoice.uuid_fiscal) {
     return json({ ok: false, reason: "Solo se pueden cancelar CFDI emitidos y vigentes." }, 409);
   }
+  const folioLabel = `${invoice.series}-${String(invoice.folio).padStart(6, "0")}`;
 
   const pacResponse = invoice.pac_response;
   const facturamaId =
@@ -119,6 +121,17 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (cancelled) {
+      await notify(supabase, {
+        user_id: invoice.user_id,
+        kind: "invoice_cancelled",
+        title: `Factura ${folioLabel} cancelada`,
+        body: "El SAT confirmó la cancelación de este comprobante.",
+        link: `/invoices/${invoice.id}`,
+        metadata: { invoice_id: invoice.id },
+      });
+    }
+
     return json({
       ok: true,
       cancelled,
@@ -150,6 +163,14 @@ Deno.serve(async (req) => {
           p_pac_response: current,
         });
         if (!reconcileError) {
+          await notify(supabase, {
+            user_id: invoice.user_id,
+            kind: "invoice_cancelled",
+            title: `Factura ${folioLabel} cancelada`,
+            body: "El SAT confirmó la cancelación de este comprobante.",
+            link: `/invoices/${invoice.id}`,
+            metadata: { invoice_id: invoice.id },
+          });
           return json({
             ok: true,
             cancelled: true,
@@ -188,6 +209,27 @@ Deno.serve(async (req) => {
     } catch {
       // Best-effort bookkeeping; never mask the original error below.
     }
+
+    // El código de statuses de cancellation_status incluye 'rejected', pero
+    // en el flujo real esta rama siempre deja cancellation_status en
+    // 'error' (mark_cfdi_cancellation_error) — 'rejected' nunca se asigna
+    // en el código actual. invoice_cancel_rejected cubre ambos casos: un
+    // intento de cancelación que no se pudo confirmar.
+    await notify(supabase, {
+      user_id: invoice.user_id,
+      kind: "invoice_cancel_rejected",
+      title: `No se pudo cancelar la factura ${folioLabel}`,
+      body: isFacturamaError(error)
+        ? userFacingPacMessage(
+            error,
+            "Ocurrió un problema técnico al cancelar. Intenta de nuevo en unos minutos.",
+          )
+        : error instanceof Error
+          ? error.message
+          : "No fue posible cancelar el CFDI.",
+      link: `/invoices/${invoice.id}`,
+      metadata: { invoice_id: invoice.id },
+    });
 
     if (isFacturamaError(error)) {
       return json(
