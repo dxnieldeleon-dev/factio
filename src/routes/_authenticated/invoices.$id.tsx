@@ -561,16 +561,16 @@ function InvoiceDetail() {
           <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Acciones
           </h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-nowrap gap-1.5">
             {inv.xml_url && (
               <button
                 type="button"
                 onClick={() =>
                   openInvoiceDocument(inv.xml_url!).catch((error) => toast.error(error.message))
                 }
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold"
+                className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full border border-border bg-surface px-2 py-1.5 text-xs font-semibold"
               >
-                <Download className="size-3.5" /> XML
+                <Download className="size-3.5 shrink-0" /> <span className="truncate">XML</span>
               </button>
             )}
             {inv.pdf_url && (
@@ -579,9 +579,9 @@ function InvoiceDetail() {
                 onClick={() =>
                   openInvoiceDocument(inv.pdf_url!).catch((error) => toast.error(error.message))
                 }
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold"
+                className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full border border-border bg-surface px-2 py-1.5 text-xs font-semibold"
               >
-                <Download className="size-3.5" /> PDF
+                <Download className="size-3.5 shrink-0" /> <span className="truncate">PDF</span>
               </button>
             )}
             {inv.pdf_url && (
@@ -589,21 +589,21 @@ function InvoiceDetail() {
                 type="button"
                 onClick={sendWhatsApp}
                 disabled={sendingWhatsApp}
-                className="inline-flex items-center gap-1.5 rounded-full bg-[#25D366] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full bg-[#25D366] px-2 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
               >
                 {sendingWhatsApp ? (
-                  <Loader2 className="size-3.5 animate-spin" />
+                  <Loader2 className="size-3.5 shrink-0 animate-spin" />
                 ) : (
-                  <Share2 className="size-3.5" />
-                )}{" "}
-                WhatsApp
+                  <Share2 className="size-3.5 shrink-0" />
+                )}
+                <span className="truncate">WhatsApp</span>
               </button>
             )}
             <button
               onClick={() => setConfirmOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-full bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground"
+              className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full bg-destructive px-2 py-1.5 text-xs font-semibold text-destructive-foreground"
             >
-              <Ban className="size-3.5" /> Cancelar factura
+              <Ban className="size-3.5 shrink-0" /> <span className="truncate">Cancelar factura</span>
             </button>
           </div>
         </section>
