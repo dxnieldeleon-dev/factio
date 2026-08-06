@@ -3,7 +3,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cancelCfdi, getCfdi } from "../_shared/facturama/client.ts";
-import { isFacturamaError } from "../_shared/facturama/errors.ts";
+import { isFacturamaError, userFacingPacMessage } from "../_shared/facturama/errors.ts";
 
 const allowedOrigin = Deno.env.get("APP_URL") ?? "https://factio.lovable.app";
 const cors = {
@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
     return json(
       {
         ok: false,
-        reason: "La factura no conserva el identificador de Facturama requerido para cancelarla.",
+        reason: "La factura no conserva el identificador del CFDI requerido para cancelarla.",
       },
       409,
     );
@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
       return json(
         {
           ok: false,
-          reason: `Facturama procesó la cancelación, pero no se pudo guardar el resultado: ${updateError.message}`,
+          reason: `Se procesó la cancelación, pero no se pudo guardar el resultado: ${updateError.message}`,
           facturama_response: cancellation,
         },
         502,
@@ -193,7 +193,10 @@ Deno.serve(async (req) => {
       return json(
         {
           ok: false,
-          reason: error.message,
+          reason: userFacingPacMessage(
+            error,
+            "Ocurrió un problema técnico al cancelar tu comprobante. Intenta de nuevo en unos minutos.",
+          ),
           facturama_status: error.status,
           facturama_response: error.pacResponse,
         },

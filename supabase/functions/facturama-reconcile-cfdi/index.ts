@@ -7,7 +7,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { documentBase64, downloadCfdi, getCfdi, getCfdiUuid } from "../_shared/facturama/client.ts";
-import { isFacturamaError } from "../_shared/facturama/errors.ts";
+import { isFacturamaError, userFacingPacMessage } from "../_shared/facturama/errors.ts";
 
 const allowedOrigin = Deno.env.get("APP_URL") ?? "https://factio.lovable.app";
 const cors = {
@@ -141,18 +141,20 @@ async function completeFromCfdiId(
         {
           ok: false,
           reason:
-            "Facturama no tiene registro de ese CFDI. Si confirmaste en su panel que nunca se generó, usa confirm_not_stamped.",
+            "No hay registro de ese CFDI ante el proveedor de timbrado. Si confirmaste que nunca se generó, usa confirm_not_stamped.",
         },
         404,
       );
     }
-    const message = isFacturamaError(error) ? error.message : "No fue posible consultar Facturama.";
+    const message = isFacturamaError(error)
+      ? userFacingPacMessage(error, "Ocurrió un problema técnico al consultar el comprobante. Intenta de nuevo en unos minutos.")
+      : "No fue posible consultar el comprobante.";
     return json({ ok: false, reason: message }, 502);
   }
 
   const uuid = getCfdiUuid(detail);
   if (!uuid) {
-    return json({ ok: false, reason: "Facturama no devolvió el UUID fiscal de ese CFDI." }, 502);
+    return json({ ok: false, reason: "No se recibió el UUID fiscal de ese CFDI." }, 502);
   }
 
   let xmlPath: string;
@@ -171,7 +173,9 @@ async function completeFromCfdiId(
     xmlPath = xmlResult;
     pdfPath = pdfResult;
   } catch (error) {
-    const message = isFacturamaError(error) ? error.message : "No fue posible descargar los documentos del CFDI.";
+    const message = isFacturamaError(error)
+      ? userFacingPacMessage(error, "Ocurrió un problema técnico al descargar los documentos del CFDI. Intenta de nuevo en unos minutos.")
+      : "No fue posible descargar los documentos del CFDI.";
     return json({ ok: false, reason: message }, 502);
   }
 
@@ -189,7 +193,7 @@ async function completeFromCfdiId(
     return json(
       {
         ok: false,
-        reason: `El CFDI se recuperó de Facturama, pero no se pudo finalizar su registro: ${finalizeError.message}`,
+        reason: `El CFDI se recuperó del proveedor de timbrado, pero no se pudo finalizar su registro: ${finalizeError.message}`,
       },
       409,
     );
@@ -258,7 +262,7 @@ Deno.serve(async (req) => {
         {
           ok: false,
           reason:
-            "No se guardó un identificador de Facturama para esta factura (la solicitud de timbrado nunca llegó a responder). Verifica manualmente en el panel de Facturama y usa confirm_stamped o confirm_not_stamped.",
+            "No se guardó un identificador de CFDI para esta factura (la solicitud de timbrado nunca llegó a responder). Verifica manualmente con el proveedor de timbrado y usa confirm_stamped o confirm_not_stamped.",
         },
         409,
       );
@@ -279,7 +283,7 @@ Deno.serve(async (req) => {
     const note =
       typeof payload?.note === "string" && payload.note.trim()
         ? payload.note.trim()
-        : "Confirmado manualmente: Facturama no tiene registro de este CFDI.";
+        : "Confirmado manualmente: no hay registro de este CFDI ante el proveedor de timbrado.";
     const { error } = await supabase.rpc("release_cfdi_stamp_reconciliation", {
       p_invoice_id: invoiceId,
       p_note: note,
