@@ -27,15 +27,17 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
 // Evita reenviar el mismo aviso en corridas sucesivas del cron: si ya existe
-// una notificación de este `kind` (y, cuando aplica, del mismo
-// metadata.company_id) dentro de la ventana, no se vuelve a insertar. Ante
-// un error de lectura se asume "ya enviada" — mejor perder un aviso puntual
-// que arriesgar spam si esta revisión falla.
+// una notificación de este `kind` (y, cuando aplica, que coincide en las
+// claves de `metadata` indicadas — p. ej. company_id, o company_id +
+// fiscal_year cuando una sola clave no basta para distinguir el aviso)
+// dentro de la ventana, no se vuelve a insertar. Ante un error de lectura se
+// asume "ya enviada" — mejor perder un aviso puntual que arriesgar spam si
+// esta revisión falla.
 async function hasRecentNotification(params: {
   userId: string;
   kind: NotificationKind;
   windowHours: number;
-  companyId?: string;
+  metadataMatch?: Record<string, string>;
 }): Promise<boolean> {
   let query = admin
     .from("notifications")
@@ -43,8 +45,8 @@ async function hasRecentNotification(params: {
     .eq("user_id", params.userId)
     .eq("kind", params.kind)
     .gte("created_at", new Date(Date.now() - params.windowHours * HOUR_MS).toISOString());
-  if (params.companyId) {
-    query = query.eq("metadata->>company_id", params.companyId);
+  for (const [key, value] of Object.entries(params.metadataMatch ?? {})) {
+    query = query.eq(`metadata->>${key}`, value);
   }
   const { data, error } = await query.limit(1);
   if (error) {
@@ -90,7 +92,7 @@ async function checkCsdExpiring(): Promise<number> {
       userId: company.user_id,
       kind: threshold.kind,
       windowHours: 20,
-      companyId: company.id,
+      metadataMatch: { company_id: company.id },
     });
     if (alreadySent) continue;
 
@@ -128,7 +130,7 @@ async function checkOnboardingIncomplete(): Promise<number> {
       userId: company.user_id,
       kind: "onboarding_incomplete",
       windowHours: 7 * 24,
-      companyId: company.id,
+      metadataMatch: { company_id: company.id },
     });
     if (alreadySent) continue;
 
@@ -205,7 +207,7 @@ async function checkInactivity(): Promise<number> {
       userId: company.user_id,
       kind: "inactivity_reminder",
       windowHours: 15 * 24,
-      companyId: company.id,
+      metadataMatch: { company_id: company.id },
     });
     if (alreadySent) continue;
 
@@ -216,6 +218,99 @@ async function checkInactivity(): Promise<number> {
       body: "Cuando quieras, aquí está Factio para tu próxima factura.",
       link: "/invoices/new",
       metadata: { company_id: company.id },
+    });
+    sent++;
+  }
+  return sent;
+}
+
+const CANCEL_DEADLINE_THRESHOLDS = [30, 15, 5];
+
+// Regla confirmada con el usuario: el plazo para cancelar un CFDI con
+// aceptación del receptor vence en la fecha límite de la declaración anual
+// del ejercicio fiscal en que se emitió — no un conteo fijo de días desde el
+// timbrado. Personas morales (RFC de 12 caracteres): 31 de marzo del año
+// siguiente. Personas físicas (RFC de 13 caracteres): 30 de abril del año
+// siguiente. No contempla la excepción de facturas menores a $1,000 MXN
+// (cancelables sin aceptación) — no se confirmó si aplica un plazo distinto
+// para esas.
+function fiscalYearCancellationDeadline(fiscalYear: number, rfc: string): Date {
+  const isPersonaMoral = rfc.trim().toUpperCase().length === 12;
+  return isPersonaMoral
+    ? new Date(Date.UTC(fiscalYear + 1, 2, 31)) // marzo = índice 2
+    : new Date(Date.UTC(fiscalYear + 1, 3, 30)); // abril = índice 3
+}
+
+// El plazo es el mismo para todas las facturas de un mismo ejercicio fiscal
+// de una misma empresa, así que se notifica una sola vez por (empresa, año),
+// no por factura — evita mandar decenas de avisos individuales.
+async function checkCancellationDeadline(): Promise<number> {
+  const { data: companies, error: companiesError } = await admin
+    .from("companies")
+    .select("id, user_id, rfc");
+  if (companiesError) {
+    console.error(
+      "daily-notifications-check: fallo consultando companies para plazo de cancelación",
+      companiesError.message,
+    );
+    return 0;
+  }
+  if (!companies?.length) return 0;
+
+  const { data: invoices, error: invoicesError } = await admin
+    .from("invoices")
+    .select("company_id, issued_at")
+    .eq("status", "issued")
+    .in(
+      "company_id",
+      companies.map((c) => c.id),
+    );
+  if (invoicesError) {
+    console.error(
+      "daily-notifications-check: fallo consultando invoices para plazo de cancelación",
+      invoicesError.message,
+    );
+    return 0;
+  }
+
+  const countByCompanyYear = new Map<string, number>();
+  for (const invoice of invoices ?? []) {
+    if (!invoice.company_id || !invoice.issued_at) continue;
+    const fiscalYear = new Date(invoice.issued_at).getUTCFullYear();
+    const key = `${invoice.company_id}:${fiscalYear}`;
+    countByCompanyYear.set(key, (countByCompanyYear.get(key) ?? 0) + 1);
+  }
+
+  const companyById = new Map(companies.map((c) => [c.id, c]));
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  let sent = 0;
+  for (const [key, invoiceCount] of countByCompanyYear) {
+    const [companyId, fiscalYearStr] = key.split(":");
+    const company = companyById.get(companyId);
+    if (!company) continue;
+    const fiscalYear = Number(fiscalYearStr);
+
+    const deadline = fiscalYearCancellationDeadline(fiscalYear, company.rfc);
+    const daysLeft = Math.round((deadline.getTime() - today.getTime()) / DAY_MS);
+    if (!CANCEL_DEADLINE_THRESHOLDS.includes(daysLeft)) continue;
+
+    const alreadySent = await hasRecentNotification({
+      userId: company.user_id,
+      kind: "cfdi_cancel_deadline",
+      windowHours: 20,
+      metadataMatch: { company_id: company.id, fiscal_year: String(fiscalYear) },
+    });
+    if (alreadySent) continue;
+
+    await notify(admin, {
+      user_id: company.user_id,
+      kind: "cfdi_cancel_deadline",
+      title: `El plazo para cancelar tus facturas de ${fiscalYear} vence en ${daysLeft} días`,
+      body: `Tienes ${invoiceCount} factura${invoiceCount === 1 ? "" : "s"} emitida${invoiceCount === 1 ? "" : "s"} en ${fiscalYear} que ya no podrás cancelar con aceptación del receptor después del ${deadline.toLocaleDateString("es-MX")} (fecha límite de la declaración anual de ese ejercicio).`,
+      link: "/history",
+      metadata: { fiscal_year: fiscalYear, invoice_count: invoiceCount, company_id: company.id },
     });
     sent++;
   }
@@ -239,16 +334,18 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const [csdExpiring, onboardingIncomplete, inactivity] = await Promise.all([
+    const [csdExpiring, onboardingIncomplete, inactivity, cancelDeadline] = await Promise.all([
       checkCsdExpiring(),
       checkOnboardingIncomplete(),
       checkInactivity(),
+      checkCancellationDeadline(),
     ]);
 
     const summary = {
       csd_expiring: csdExpiring,
       onboarding_incomplete: onboardingIncomplete,
       inactivity_reminder: inactivity,
+      cfdi_cancel_deadline: cancelDeadline,
     };
     console.log("daily-notifications-check: resumen", summary);
     return json({ ok: true, summary });

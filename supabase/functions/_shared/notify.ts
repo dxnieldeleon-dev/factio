@@ -24,7 +24,8 @@ export type NotificationKind =
   | "csd_expiring_15"
   | "csd_expiring_5"
   | "onboarding_incomplete"
-  | "inactivity_reminder";
+  | "inactivity_reminder"
+  | "cfdi_cancel_deadline";
 
 type NotificationCategory = "billing" | "invoicing" | "stamps" | "csd";
 
@@ -43,6 +44,7 @@ const CATEGORY_BY_KIND: Record<NotificationKind, NotificationCategory> = {
   csd_expiring_5: "csd",
   onboarding_incomplete: "invoicing",
   inactivity_reminder: "invoicing",
+  cfdi_cancel_deadline: "invoicing",
 };
 
 export interface NotifyParams {
