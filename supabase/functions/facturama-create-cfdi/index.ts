@@ -15,6 +15,7 @@ import {
   CfdiWorkflowError,
   isCfdiWorkflowError,
   isFacturamaError,
+  userFacingPacMessage,
 } from "../_shared/facturama/errors.ts";
 import { resolveTaxTreatment } from "../_shared/tax/withholding.ts";
 
@@ -531,7 +532,10 @@ function integrationErrorResponse(error: unknown): Response {
       {
         ok: false,
         stamped: false,
-        reason: error.message,
+        reason: userFacingPacMessage(
+          error,
+          "Ocurrió un problema técnico al timbrar tu comprobante. Intenta de nuevo en unos minutos.",
+        ),
         facturama_status: error.status,
         facturama_response: error.pacResponse,
       },
@@ -740,7 +744,7 @@ Deno.serve(async (req) => {
     cfdiId = getCfdiId(stampResponse);
     if (!cfdiId) {
       throw new CfdiWorkflowError(
-        "Facturama timbró la solicitud pero no devolvió el identificador del CFDI.",
+        "El comprobante se timbró pero no se recibió el identificador del CFDI.",
         502,
         stampResponse,
       );
@@ -750,7 +754,7 @@ Deno.serve(async (req) => {
     const uuid = getCfdiUuid(detailResponse);
     if (!uuid) {
       throw new CfdiWorkflowError(
-        "Facturama no devolvió el UUID fiscal del CFDI timbrado.",
+        "No se recibió el UUID fiscal del comprobante timbrado.",
         502,
         detailResponse,
       );

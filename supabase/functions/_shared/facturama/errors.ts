@@ -63,3 +63,18 @@ export function pacMessage(response: unknown, fallback: string): string {
   const details = fieldErrors(body);
   return details ? `${message} (${details})` : message;
 }
+
+const FACTURAMA_MENTION = /\bfacturama\b/gi;
+
+// Facturama's own error copy sometimes names them directly (e.g. "El equipo
+// de Facturama ya se encuentra informado de este error"), which reads oddly
+// surfaced as our own product's error and needlessly exposes which PAC we
+// use under the hood. A 5xx from them is their own infra failing (often
+// their sandbox, which is flakier than production) and isn't something the
+// user can act on, so it gets replaced entirely with our own retry message.
+// A 4xx is usually specific and actionable (bad input, duplicate CSD, etc.)
+// and safe to forward, but still gets their name scrubbed as a fallback.
+export function userFacingPacMessage(error: FacturamaError, retryFallback: string): string {
+  if (error.status >= 500) return retryFallback;
+  return error.message.replace(FACTURAMA_MENTION, "el proveedor de timbrado");
+}

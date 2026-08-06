@@ -10,7 +10,7 @@ import { encodeBase64 } from "jsr:@std/encoding/base64";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import forge from "npm:node-forge@1.3.1";
 import { uploadCsd, updateCsd } from "../_shared/facturama/client.ts";
-import { isFacturamaError } from "../_shared/facturama/errors.ts";
+import { isFacturamaError, userFacingPacMessage } from "../_shared/facturama/errors.ts";
 
 const allowedOrigin = Deno.env.get("APP_URL") ?? "https://factio.lovable.app";
 const cors = {
@@ -227,8 +227,11 @@ Deno.serve(async (req) => {
         await updateCsd(csdPayload);
       } catch (updateError) {
         const message = isFacturamaError(updateError)
-          ? updateError.message
-          : "No fue posible actualizar el CSD en Facturama.";
+          ? userFacingPacMessage(
+              updateError,
+              "Ocurrió un problema técnico al actualizar tu CSD. Intenta de nuevo en unos minutos.",
+            )
+          : "No fue posible actualizar tu CSD.";
         await supabase
           .from("companies")
           .update({ csd_status: "error", csd_last_error: message })
@@ -243,8 +246,11 @@ Deno.serve(async (req) => {
       }
     } else {
       const message = isFacturamaError(error)
-        ? error.message
-        : "No fue posible cargar el CSD en Facturama.";
+        ? userFacingPacMessage(
+            error,
+            "Ocurrió un problema técnico al cargar tu CSD. Intenta de nuevo en unos minutos.",
+          )
+        : "No fue posible cargar tu CSD.";
       await supabase
         .from("companies")
         .update({ csd_status: "error", csd_last_error: message })
@@ -271,7 +277,7 @@ Deno.serve(async (req) => {
       return json(
         {
           success: false,
-          error: "El CSD fue registrado en Facturama, pero no pudo guardarse en Factio.",
+          error: "El CSD fue registrado con el proveedor de timbrado, pero no pudo guardarse en Factio.",
         },
         502,
       );
@@ -297,7 +303,7 @@ Deno.serve(async (req) => {
     return json(
       {
         success: false,
-        error: "El CSD fue registrado en Facturama, pero no se pudo actualizar la empresa.",
+        error: "El CSD fue registrado con el proveedor de timbrado, pero no se pudo actualizar la empresa.",
       },
       502,
     );
