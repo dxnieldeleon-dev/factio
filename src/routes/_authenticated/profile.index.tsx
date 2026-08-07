@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { CreditCardIcon } from "@/components/icons/credit-card-icon";
 import { supabase } from "@/integrations/supabase/client";
 import { isCsdConfigured, loadCompanyProfile } from "@/features/profile/company-profile";
+import { signOutFactio } from "@/lib/sign-out";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -139,7 +140,7 @@ function Profile() {
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
+    await signOutFactio(queryClient);
     navigate({ to: "/auth", replace: true });
   }
 
