@@ -24,6 +24,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
 import { formatMXN } from "@/lib/format";
 import { openInvoiceDocument, shareInvoiceOnWhatsApp } from "@/lib/invoice-documents";
+import { playSuccessChime } from "@/lib/success-chime";
+import { TimbradoSuccessOverlay } from "@/components/TimbradoSuccessOverlay";
 import {
   CFDI_USES,
   PAYMENT_FORMS,
@@ -172,6 +174,7 @@ function NewInvoice() {
     xmlUrl: string;
     pdfUrl: string;
   } | null>(null);
+  const [stampSuccessOpen, setStampSuccessOpen] = useState(false);
 
   // Perfil emisor (para reglas de RFC genérico → CP del emisor)
   const { data: issuer } = useQuery({
@@ -511,6 +514,8 @@ function NewInvoice() {
         pdfUrl: issuedInvoice.pdf_url ?? "",
       });
       setStep(4);
+      setStampSuccessOpen(true);
+      playSuccessChime();
     } catch (err) {
       console.error("Invoice issue error:", err);
       toast.error(err instanceof Error ? err.message : "No pudimos emitir la factura");
@@ -600,6 +605,12 @@ function NewInvoice() {
           <StepSuccess result={result} total={totals.total} clientPhone={client?.phone ?? null} />
         )}
       </div>
+
+      <TimbradoSuccessOverlay
+        open={stampSuccessOpen}
+        onClose={() => setStampSuccessOpen(false)}
+        folioFiscal={result?.uuid}
+      />
     </div>
   );
 }
@@ -1396,10 +1407,12 @@ function StepReview(props: StepReviewProps) {
       <button
         onClick={onIssue}
         disabled={issuing || receiverBlocking || !!paymentError}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-50"
+        className={`mx-auto flex items-center justify-center gap-2 bg-foreground text-sm font-semibold text-background transition-all duration-300 active:scale-[0.98] disabled:opacity-50 ${
+          issuing ? "aspect-square w-[88px] rounded-full py-0" : "w-full rounded-2xl py-4"
+        }`}
       >
         {issuing ? (
-          <Loader2 className="size-4 animate-spin" />
+          <Loader2 className="size-5 animate-spin" />
         ) : (
           <>
             Emitir factura <Check className="size-4" />

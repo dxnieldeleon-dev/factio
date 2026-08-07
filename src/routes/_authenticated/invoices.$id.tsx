@@ -19,6 +19,8 @@ import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
 import { formatMXN, formatDateMX } from "@/lib/format";
 import { openInvoiceDocument, shareInvoiceOnWhatsApp } from "@/lib/invoice-documents";
 import { readDuplicateWarnings, runDuplicateFromInvoice } from "@/lib/duplicate-invoice-ui";
+import { playSuccessChime } from "@/lib/success-chime";
+import { TimbradoSuccessOverlay } from "@/components/TimbradoSuccessOverlay";
 import { StatusChip } from "./dashboard";
 import {
   AlertDialog,
@@ -118,6 +120,8 @@ function InvoiceDetail() {
   const [ivaRetencionPct, setIvaRetencionPct] = useState(0);
   const [savingTaxes, setSavingTaxes] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [stampSuccessOpen, setStampSuccessOpen] = useState(false);
+  const [stampedUuid, setStampedUuid] = useState<string | null>(null);
 
   // Si esta pantalla es el destino de una duplicación reciente, muestra los
   // avisos de cambio de precio que quedaron guardados justo antes de
@@ -198,6 +202,9 @@ function InvoiceDetail() {
         return;
       }
       toast.success("Factura timbrada correctamente");
+      setStampedUuid(typeof stampResult.uuid === "string" ? stampResult.uuid : null);
+      setStampSuccessOpen(true);
+      playSuccessChime();
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["dashboard"] }),
         qc.invalidateQueries({ queryKey: ["profile"] }),
@@ -569,10 +576,12 @@ function InvoiceDetail() {
             type="button"
             onClick={stampDraft}
             disabled={stamping || stampBusy || needsReconciliation}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-foreground py-3.5 text-sm font-semibold text-background transition active:scale-[0.98] disabled:opacity-60"
+            className={`mx-auto flex items-center justify-center gap-2 bg-foreground text-sm font-semibold text-background transition-all duration-300 active:scale-[0.98] disabled:opacity-60 ${
+              stamping ? "aspect-square w-[88px] rounded-full py-0" : "w-full rounded-2xl py-3.5"
+            }`}
           >
             {stamping ? (
-              <Loader2 className="size-4 animate-spin" />
+              <Loader2 className="size-5 animate-spin" />
             ) : (
               <>
                 <Send className="size-4" /> Continuar con el timbrado
@@ -826,6 +835,12 @@ function InvoiceDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TimbradoSuccessOverlay
+        open={stampSuccessOpen}
+        onClose={() => setStampSuccessOpen(false)}
+        folioFiscal={stampedUuid}
+      />
     </div>
   );
 }

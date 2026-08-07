@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
   ChevronRight,
-  CreditCard,
   KeyRound,
   Loader2,
   LogOut,
@@ -14,6 +13,7 @@ import {
   Zap,
 } from "lucide-react";
 import { toast } from "sonner";
+import { CreditCardIcon } from "@/components/icons/credit-card-icon";
 import { supabase } from "@/integrations/supabase/client";
 import { isCsdConfigured, loadCompanyProfile } from "@/features/profile/company-profile";
 import {
@@ -228,7 +228,7 @@ function Profile() {
                 <p className="font-semibold">{activePlan.nombre}</p>
                 <p className="text-xs text-muted-foreground">${activePlan.precio_mxn} MXN/mes</p>
               </div>
-              <CreditCard className="size-5 text-primary" />
+              <CreditCardIcon size={20} color="var(--primary)" />
             </div>
             <div className="mt-3">
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
