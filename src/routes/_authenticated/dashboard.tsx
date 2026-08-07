@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   Plus,
@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 import { formatMXN, formatDateMX } from "@/lib/format";
 import { clientCategoryIcon } from "@/lib/client-categories";
+import { signOutFactio } from "@/lib/sign-out";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -168,6 +169,7 @@ async function loadDashboard(): Promise<DashboardData> {
 
 function Dashboard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["dashboard"], queryFn: loadDashboard });
   const [csdDismissed, setCsdDismissed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -190,7 +192,7 @@ function Dashboard() {
     (!data.hasActiveSubscription || (data.stampBalance !== null && data.stampBalance <= 0));
 
   async function onSignOut() {
-    await supabase.auth.signOut();
+    await signOutFactio(queryClient);
     navigate({ to: "/auth", replace: true });
   }
 
