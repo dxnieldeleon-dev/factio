@@ -6,9 +6,8 @@ import { CsdGateScreen } from "./CsdGateScreen";
 import { CsdUploadScreen } from "./CsdUploadScreen";
 import { CsdValidatingChecklist } from "./CsdValidatingChecklist";
 import { CsdSuccessScreen } from "./CsdSuccessScreen";
-import { CsdComingSoonScreen } from "./CsdComingSoonScreen";
 
-type Screen = "gate" | "upload" | "validating" | "success" | "coming_soon";
+type Screen = "gate" | "upload" | "validating" | "success";
 
 export function CsdSetupFlow({
   profile,
@@ -31,14 +30,7 @@ export function CsdSetupFlow({
     <div className="space-y-4">
       {configured && screen === "upload" && <ConfiguredBadge />}
 
-      {screen === "gate" && (
-        <CsdGateScreen
-          onHaveCsd={() => setScreen("upload")}
-          onGenerateCsd={() => setScreen("coming_soon")}
-        />
-      )}
-
-      {screen === "coming_soon" && <CsdComingSoonScreen onBack={() => setScreen("upload")} />}
+      {screen === "gate" && <CsdGateScreen onHaveCsd={() => setScreen("upload")} />}
 
       {screen === "upload" && (
         <CsdUploadScreen csd={csd} onValidated={() => setScreen("validating")} />
