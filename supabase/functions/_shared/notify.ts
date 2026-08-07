@@ -20,9 +20,9 @@ export type NotificationKind =
   // Tier 2 (cron, ver daily-notifications-check): reutilizan las mismas 4
   // categorías del Tier 1 en vez de crear una quinta — csd_expiring_* cae en
   // 'csd', onboarding_incomplete e inactivity_reminder caen en 'invoicing'.
+  | "csd_expiring_60"
   | "csd_expiring_30"
-  | "csd_expiring_15"
-  | "csd_expiring_5"
+  | "csd_expiring_7"
   | "onboarding_incomplete"
   | "inactivity_reminder"
   | "cfdi_cancel_deadline";
@@ -39,9 +39,9 @@ const CATEGORY_BY_KIND: Record<NotificationKind, NotificationCategory> = {
   invoice_cancel_rejected: "invoicing",
   stamps_low: "stamps",
   csd_uploaded: "csd",
+  csd_expiring_60: "csd",
   csd_expiring_30: "csd",
-  csd_expiring_15: "csd",
-  csd_expiring_5: "csd",
+  csd_expiring_7: "csd",
   onboarding_incomplete: "invoicing",
   inactivity_reminder: "invoicing",
   cfdi_cancel_deadline: "invoicing",

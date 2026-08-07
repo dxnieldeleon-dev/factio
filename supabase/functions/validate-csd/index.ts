@@ -1,12 +1,13 @@
 // Edge Function: validate-csd
-// Validates CSD files stored in private Storage and registers them with Facturama.
+// Valida un CSD (.cer/.key + contraseña), lo registra ante Facturama y guarda
+// los archivos cifrados (AES-256-GCM) en Storage — nunca en texto plano.
 //
 // Uses node-forge (pure JS) instead of node:crypto to parse the certificate
 // and decrypt the private key: many real SAT CSDs use legacy PKCS#8
 // encryption algorithms (e.g. RC2-40-CBC, 3DES) that Deno's native crypto
 // backend does not implement, while forge implements the ciphers itself.
 
-import { encodeBase64 } from "jsr:@std/encoding/base64";
+import { decodeBase64, encodeBase64 } from "jsr:@std/encoding/base64";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import forge from "npm:node-forge@1.3.1";
 import { uploadCsd, updateCsd } from "../_shared/facturama/client.ts";
@@ -23,8 +24,12 @@ const cors = {
 type CsdRequest = {
   company_id?: unknown;
   password?: unknown;
-  cer_path?: unknown;
-  key_path?: unknown;
+  // Contenido crudo de los archivos, en base64 (sin prefijo data:) — solo se
+  // envían cuando el usuario está subiendo/reemplazando el CSD. Si se omiten
+  // y la empresa ya tiene un CSD guardado, se re-valida el archivo existente
+  // (p. ej. para confirmar la contraseña sin volver a adjuntar los archivos).
+  cer_base64?: unknown;
+  key_base64?: unknown;
 };
 
 type CsdValidation =
@@ -44,10 +49,6 @@ function userClient(url: string, anonKey: string, token: string) {
   });
 }
 
-function isStoragePath(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && !value.includes("..");
-}
-
 function uint8ToBinaryString(bytes: Uint8Array): string {
   let binary = "";
   const chunkSize = 0x8000;
@@ -56,6 +57,62 @@ function uint8ToBinaryString(bytes: Uint8Array): string {
     binary += String.fromCharCode.apply(null, Array.from(chunk));
   }
   return binary;
+}
+
+function asBase64(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+// --- Cifrado en reposo -------------------------------------------------
+// Los .cer/.key nunca se escriben a Storage sin cifrar. La llave vive en
+// Supabase Vault (`csd_encryption_key`), expuesta solo a service_role vía la
+// RPC get_csd_encryption_key (las Edge Functions no pueden leer el esquema
+// `vault` directamente por PostgREST).
+
+let cachedKey: CryptoKey | null = null;
+
+async function getEncryptionKey(): Promise<CryptoKey | null> {
+  if (cachedKey) return cachedKey;
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceRoleKey) return null;
+
+  const admin = createClient(url, serviceRoleKey);
+  const { data, error } = await admin.rpc("get_csd_encryption_key");
+  if (error || typeof data !== "string" || !data) {
+    console.error("No se pudo obtener la llave de cifrado del CSD", error?.message);
+    return null;
+  }
+  cachedKey = await crypto.subtle.importKey("raw", decodeBase64(data), "AES-GCM", false, [
+    "encrypt",
+    "decrypt",
+  ]);
+  return cachedKey;
+}
+
+// IV de 12 bytes al inicio del blob, seguido del ciphertext (que ya incluye
+// el tag de autenticación de GCM) — un solo objeto por archivo, sin metadata aparte.
+async function encryptBytes(key: CryptoKey, plain: Uint8Array): Promise<Uint8Array> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain));
+  const out = new Uint8Array(iv.length + cipher.length);
+  out.set(iv, 0);
+  out.set(cipher, iv.length);
+  return out;
+}
+
+// Devuelve null si el blob no se pudo descifrar con esta llave — el llamador
+// interpreta eso como "archivo legado sin cifrar" y usa los bytes tal cual,
+// en vez de fallar de golpe para CSDs guardados antes de este cambio.
+async function tryDecryptBytes(key: CryptoKey, blob: Uint8Array): Promise<Uint8Array | null> {
+  if (blob.length < 13) return null;
+  const iv = blob.slice(0, 12);
+  const cipher = blob.slice(12);
+  try {
+    return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher));
+  } catch {
+    return null;
+  }
 }
 
 function validateCsd(
@@ -158,54 +215,68 @@ Deno.serve(async (req) => {
   if (companyError || !company)
     return json({ success: false, error: "Empresa no encontrada." }, 404);
 
-  const stagingPrefix = `${authData.user.id}/csd-staging/`;
-  const requestedPaths =
-    isStoragePath(payload.cer_path) && isStoragePath(payload.key_path)
-      ? { cer: payload.cer_path, key: payload.key_path }
-      : null;
-  if (
-    requestedPaths &&
-    (!requestedPaths.cer.startsWith(stagingPrefix) || !requestedPaths.key.startsWith(stagingPrefix))
-  ) {
-    return json({ success: false, error: "Las rutas temporales del CSD no son válidas." }, 400);
+  const newCerBase64 = asBase64(payload.cer_base64);
+  const newKeyBase64 = asBase64(payload.key_base64);
+  const isNewUpload = Boolean(newCerBase64 && newKeyBase64);
+
+  const encryptionKey = await getEncryptionKey();
+  if (!encryptionKey) {
+    return json(
+      { success: false, error: "No fue posible preparar el cifrado del CSD. Intenta de nuevo." },
+      500,
+    );
   }
 
-  const sourceCerPath = requestedPaths?.cer ?? company.csd_cer_url;
-  const sourceKeyPath = requestedPaths?.key ?? company.csd_key_url;
-  const removeStagedFiles = async () => {
-    if (requestedPaths) {
-      await supabase.storage.from("csd-files").remove([requestedPaths.cer, requestedPaths.key]);
+  let cerBytes: Uint8Array;
+  let keyBytes: Uint8Array;
+  // Se re-sube (y así se migra a cifrado) cualquier archivo legado que se
+  // haya leído en texto plano, aunque el usuario solo haya venido a
+  // re-confirmar su contraseña sin adjuntar archivos nuevos.
+  let needsReencryptOfExisting = false;
+
+  if (isNewUpload) {
+    try {
+      cerBytes = decodeBase64(newCerBase64!);
+      keyBytes = decodeBase64(newKeyBase64!);
+    } catch {
+      return json({ success: false, field: "cer", error: "Los archivos recibidos no son válidos." });
     }
-  };
-  if (!sourceCerPath || !sourceKeyPath) {
-    return json(
-      { success: false, field: "cer", error: "Debes cargar ambos archivos del CSD." },
-      400,
-    );
+  } else {
+    if (!company.csd_cer_url || !company.csd_key_url) {
+      return json(
+        { success: false, field: "cer", error: "Debes cargar ambos archivos del CSD." },
+        400,
+      );
+    }
+    const [cerDownload, keyDownload] = await Promise.all([
+      supabase.storage.from("csd-files").download(company.csd_cer_url),
+      supabase.storage.from("csd-files").download(company.csd_key_url),
+    ]);
+    if (cerDownload.error || keyDownload.error || !cerDownload.data || !keyDownload.data) {
+      return json(
+        { success: false, error: "No fue posible leer los archivos privados del CSD." },
+        502,
+      );
+    }
+    const [cerBlobBytes, keyBlobBytes] = await Promise.all([
+      cerDownload.data.arrayBuffer().then((value) => new Uint8Array(value)),
+      keyDownload.data.arrayBuffer().then((value) => new Uint8Array(value)),
+    ]);
+    const [cerPlain, keyPlain] = await Promise.all([
+      tryDecryptBytes(encryptionKey, cerBlobBytes),
+      tryDecryptBytes(encryptionKey, keyBlobBytes),
+    ]);
+    cerBytes = cerPlain ?? cerBlobBytes;
+    keyBytes = keyPlain ?? keyBlobBytes;
+    needsReencryptOfExisting = cerPlain === null || keyPlain === null;
   }
 
-  const [cerDownload, keyDownload] = await Promise.all([
-    supabase.storage.from("csd-files").download(sourceCerPath),
-    supabase.storage.from("csd-files").download(sourceKeyPath),
-  ]);
-  if (cerDownload.error || keyDownload.error || !cerDownload.data || !keyDownload.data) {
-    return json(
-      { success: false, error: "No fue posible leer los archivos privados del CSD." },
-      502,
-    );
-  }
-
-  const [cerBytes, keyBytes] = await Promise.all([
-    cerDownload.data.arrayBuffer().then((value) => new Uint8Array(value)),
-    keyDownload.data.arrayBuffer().then((value) => new Uint8Array(value)),
-  ]);
   const validation = validateCsd(cerBytes, keyBytes, payload.password);
   if (!validation.ok) {
     await supabase
       .from("companies")
       .update({ csd_status: "error", csd_last_error: validation.error })
       .eq("id", company.id);
-    await removeStagedFiles();
     return json({ success: false, field: validation.field, error: validation.error });
   }
 
@@ -237,7 +308,6 @@ Deno.serve(async (req) => {
           .from("companies")
           .update({ csd_status: "error", csd_last_error: message })
           .eq("id", company.id);
-        await removeStagedFiles();
         return json({
           success: false,
           error: message,
@@ -256,7 +326,6 @@ Deno.serve(async (req) => {
         .from("companies")
         .update({ csd_status: "error", csd_last_error: message })
         .eq("id", company.id);
-      await removeStagedFiles();
       return json({
         success: false,
         error: message,
@@ -268,22 +337,31 @@ Deno.serve(async (req) => {
 
   const finalCerPath = `${authData.user.id}/${company.id}/cert.cer`;
   const finalKeyPath = `${authData.user.id}/${company.id}/key.key`;
-  if (requestedPaths) {
-    await supabase.storage.from("csd-files").remove([finalCerPath, finalKeyPath]);
-    const [cerCopy, keyCopy] = await Promise.all([
-      supabase.storage.from("csd-files").copy(sourceCerPath, finalCerPath),
-      supabase.storage.from("csd-files").copy(sourceKeyPath, finalKeyPath),
+  if (isNewUpload || needsReencryptOfExisting) {
+    const [encryptedCer, encryptedKey] = await Promise.all([
+      encryptBytes(encryptionKey, cerBytes),
+      encryptBytes(encryptionKey, keyBytes),
     ]);
-    if (cerCopy.error || keyCopy.error) {
+    const [cerUpload, keyUpload] = await Promise.all([
+      supabase.storage.from("csd-files").upload(finalCerPath, encryptedCer, {
+        upsert: true,
+        contentType: "application/octet-stream",
+      }),
+      supabase.storage.from("csd-files").upload(finalKeyPath, encryptedKey, {
+        upsert: true,
+        contentType: "application/octet-stream",
+      }),
+    ]);
+    if (cerUpload.error || keyUpload.error) {
       return json(
         {
           success: false,
-          error: "El CSD fue registrado con el proveedor de timbrado, pero no pudo guardarse en Factio.",
+          error:
+            "El CSD fue registrado con el proveedor de timbrado, pero no pudo guardarse en Factio.",
         },
         502,
       );
     }
-    await supabase.storage.from("csd-files").remove([sourceCerPath, sourceKeyPath]);
   }
 
   const { error: updateError } = await supabase
@@ -326,5 +404,6 @@ Deno.serve(async (req) => {
     serial_number: validation.serialNumber,
     valid_from: validation.validFrom,
     valid_to: validation.validTo,
+    rfc: company.rfc,
   });
 });

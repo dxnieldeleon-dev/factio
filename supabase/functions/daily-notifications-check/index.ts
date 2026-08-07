@@ -60,12 +60,12 @@ async function hasRecentNotification(params: {
 }
 
 const CSD_EXPIRY_THRESHOLDS: Array<{ days: number; kind: NotificationKind }> = [
+  { days: 60, kind: "csd_expiring_60" },
   { days: 30, kind: "csd_expiring_30" },
-  { days: 15, kind: "csd_expiring_15" },
-  { days: 5, kind: "csd_expiring_5" },
+  { days: 7, kind: "csd_expiring_7" },
 ];
 
-// Días exactos (30/15/5), no "menor a" — así cada empresa recibe cada aviso
+// Días exactos (60/30/7), no "menor a" — así cada empresa recibe cada aviso
 // una sola vez por umbral en vez de todos los días mientras esté vigente.
 async function checkCsdExpiring(): Promise<number> {
   const { data: companies, error } = await admin

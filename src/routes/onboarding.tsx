@@ -1,4 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -6,7 +7,6 @@ import {
   Loader2,
   Upload,
   CheckCircle2,
-  Lock,
   Image as ImageIcon,
   FileText,
   Sparkles,
@@ -16,6 +16,8 @@ import { taxRegimesForPersonType, type PersonType } from "@/lib/sat-catalogs";
 import { classifyRfc, normalizeFiscalName, validateRfcStrict } from "@/lib/fiscal";
 import { extractPdfText } from "@/lib/pdf-text";
 import { parseConstanciaText, matchActivityProfile } from "@/lib/constancia-parser";
+import { loadCompanyProfile } from "@/features/profile/company-profile";
+import { CsdSetupFlow } from "@/features/profile/csd/CsdSetupFlow";
 import factioLogoInverted from "@/assets/factio-logo-inverted.png.asset.json";
 
 // activity_profiles.activity_category solo distingue el régimen fiscal que
@@ -595,266 +597,51 @@ function OnboardingPage() {
             </div>
           </div>
         ) : (
-          <StepTwoCsd companyId={companyId} userId={userId} />
+          <OnboardingCsdStep />
         )}
       </div>
     </div>
   );
 }
 
-type CsdErrors = Partial<Record<"cer" | "key" | "password", string>>;
-
-function StepTwoCsd({ companyId, userId }: { companyId: string | null; userId: string | null }) {
+function OnboardingCsdStep() {
   const navigate = useNavigate();
-  const [cerFile, setCerFile] = useState<File | null>(null);
-  const [keyFile, setKeyFile] = useState<File | null>(null);
-  const [password, setPassword] = useState("");
-  const [showPwd, setShowPwd] = useState(false);
-  const [errors, setErrors] = useState<CsdErrors>({});
-  const [validating, setValidating] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ["company-profile"],
+    queryFn: loadCompanyProfile,
+  });
 
-  function pickFile(kind: "cer" | "key") {
-    return (e: React.ChangeEvent<HTMLInputElement>) => {
-      const f = e.target.files?.[0] ?? null;
-      setErrors((prev) => ({ ...prev, [kind]: undefined }));
-      if (!f) {
-        if (kind === "cer") setCerFile(null);
-        else setKeyFile(null);
-        return;
-      }
-      if (f.size > 512 * 1024) {
-        setErrors((prev) => ({
-          ...prev,
-          [kind]: `El archivo .${kind} es demasiado grande (máx 512 KB).`,
-        }));
-        return;
-      }
-      const ext = f.name.split(".").pop()?.toLowerCase();
-      if (kind === "cer" && ext !== "cer") {
-        setErrors((prev) => ({
-          ...prev,
-          cer: "Selecciona el archivo con extensión .cer del SAT.",
-        }));
-        return;
-      }
-      if (kind === "key" && ext !== "key") {
-        setErrors((prev) => ({
-          ...prev,
-          key: "Selecciona el archivo con extensión .key del SAT.",
-        }));
-        return;
-      }
-      if (kind === "cer") setCerFile(f);
-      else setKeyFile(f);
-    };
-  }
-
-  async function onValidateAndSave() {
-    const nextErrors: CsdErrors = {};
-    if (!cerFile) nextErrors.cer = "Sube tu archivo .cer.";
-    if (!keyFile) nextErrors.key = "Sube tu archivo .key.";
-    if (!password.trim()) nextErrors.password = "Escribe la contraseña de tu llave privada.";
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
-    if (!userId || !companyId) {
-      toast.error("Sesión no válida. Vuelve a iniciar sesión.");
-      return;
-    }
-
-    setSaving(true);
+  function clearCsdBanner() {
     try {
-      // Los archivos se guardan temporalmente hasta que Facturama acepte el CSD.
-      const stagingId = crypto.randomUUID();
-      const cerPath = `${userId}/csd-staging/${stagingId}/cert.cer`;
-      const keyPath = `${userId}/csd-staging/${stagingId}/key.key`;
-
-      const [cerUp, keyUp] = await Promise.all([
-        supabase.storage.from("csd-files").upload(cerPath, cerFile!, {
-          upsert: true,
-          contentType: "application/pkix-cert",
-        }),
-        supabase.storage.from("csd-files").upload(keyPath, keyFile!, {
-          upsert: true,
-          contentType: "application/pkcs8",
-        }),
-      ]);
-      if (cerUp.error) throw cerUp.error;
-      if (keyUp.error) throw keyUp.error;
-
-      // Valida y registra en Facturama en una sola operación del servidor.
-      setSaving(false);
-      setValidating(true);
-
-      const { data, error } = await supabase.functions.invoke("validate-csd", {
-        body: { company_id: companyId, password, cer_path: cerPath, key_path: keyPath },
-      });
-      if (error) throw new Error(error.message || "No pudimos validar el CSD.");
-
-      const res = data as {
-        success: boolean;
-        error?: string;
-        field?: "cer" | "key" | "password";
-      };
-
-      if (!res?.success) {
-        const field = res?.field ?? "password";
-        const msg = res?.error ?? "El certificado no es válido.";
-        setErrors({ [field]: msg });
-        toast.error(msg);
-        return;
-      }
-
-      // Éxito → limpiar aviso persistente del dashboard y avanzar
-      try {
-        window.localStorage.removeItem("ff.csdBannerDismissed");
-      } catch {
-        // ignore
-      }
-
-      toast.success("Certificado validado y guardado correctamente.");
-      navigate({ to: "/dashboard", replace: true });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Error validando el CSD.";
-      toast.error(msg);
-    } finally {
-      setValidating(false);
-      setSaving(false);
+      window.localStorage.removeItem("ff.csdBannerDismissed");
+    } catch {
+      // ignore
     }
   }
 
-  const busy = validating || saving;
+  if (isLoading || !profile) {
+    return (
+      <div className="grid place-items-center rounded-3xl bg-background p-12 shadow-2xl">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-3xl bg-background p-6 shadow-2xl sm:p-8">
-      <div className="flex items-start gap-3">
-        <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#C2E8FF] text-[#011025]">
-          <Lock className="size-5" />
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight">
-            Paso 2 · Certificado de Sello Digital (CSD)
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Sube tu archivo <strong>.cer</strong> y tu llave privada <strong>.key</strong> junto con
-            su contraseña. Los validamos antes de guardarlos y nunca almacenamos la contraseña.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
-        <CsdFileField
-          label="Archivo .cer"
-          accept=".cer,application/x-x509-ca-cert,application/pkix-cert,application/octet-stream"
-          file={cerFile}
-          onChange={pickFile("cer")}
-          error={errors.cer}
-        />
-        <CsdFileField
-          label="Archivo .key"
-          accept=".key,application/octet-stream"
-          file={keyFile}
-          onChange={pickFile("key")}
-          error={errors.key}
-        />
-        <label className="block sm:col-span-2">
-          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Contraseña de la llave privada <span className="text-destructive">*</span>
-          </span>
-          <div className="relative">
-            <input
-              type={showPwd ? "text" : "password"}
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
-              }}
-              placeholder="La que capturaste al generar el CSD"
-              autoComplete="off"
-              className={inputCls(!!errors.password) + " pr-20"}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPwd((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-accent"
-            >
-              {showPwd ? "Ocultar" : "Mostrar"}
-            </button>
-          </div>
-          {errors.password && (
-            <span className="mt-1 block text-[11px] font-medium text-destructive">
-              {errors.password}
-            </span>
-          )}
-          <span className="mt-1 block text-[11px] text-muted-foreground">
-            Nunca guardamos tu contraseña. Se usa solo en el servidor para validar la llave y se
-            descarta al terminar.
-          </span>
-        </label>
-      </div>
-
-      <div className="mt-8 flex flex-col-reverse items-stretch justify-between gap-3 sm:flex-row sm:items-center">
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => navigate({ to: "/dashboard", replace: true })}
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-input bg-background px-5 py-2.5 text-xs font-semibold text-foreground transition hover:bg-accent disabled:opacity-50"
-          >
-            <ArrowRight className="size-4" /> Omitir por ahora
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={onValidateAndSave}
-          disabled={busy}
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-[#011025] px-6 py-3 text-sm font-semibold text-[#C2E8FF] shadow-lg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-          {validating ? "Validando certificado…" : saving ? "Guardando…" : "Validar y guardar CSD"}
-        </button>
-      </div>
+      <CsdSetupFlow
+        profile={profile}
+        allowSkip
+        onSkip={() => {
+          clearCsdBanner();
+          navigate({ to: "/dashboard", replace: true });
+        }}
+        onComplete={() => {
+          clearCsdBanner();
+          navigate({ to: "/dashboard", replace: true });
+        }}
+      />
     </div>
-  );
-}
-
-function CsdFileField({
-  label,
-  accept,
-  file,
-  onChange,
-  error,
-}: {
-  label: string;
-  accept: string;
-  file: File | null;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  error?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {label} <span className="text-destructive">*</span>
-      </span>
-      <div
-        className={`flex items-center gap-3 overflow-hidden rounded-xl border bg-background px-3 py-2.5 text-sm transition ${
-          error ? "border-destructive" : "border-input"
-        }`}
-      >
-        <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-3 py-1.5 text-xs font-semibold hover:bg-accent">
-          <Upload className="size-4" />
-          {file ? "Cambiar" : "Elegir archivo"}
-          <input type="file" accept={accept} className="hidden" onChange={onChange} />
-        </label>
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-          {file ? file.name : "Ningún archivo seleccionado"}
-        </span>
-        {file && !error && <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />}
-      </div>
-      {error && (
-        <span className="mt-1 block text-[11px] font-medium text-destructive">{error}</span>
-      )}
-    </label>
   );
 }
 
