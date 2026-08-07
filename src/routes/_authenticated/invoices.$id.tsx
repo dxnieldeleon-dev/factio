@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   Copy,
@@ -11,12 +11,14 @@ import {
   Send,
   Pencil,
   Trash2,
+  CopyPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
 import { formatMXN, formatDateMX } from "@/lib/format";
 import { openInvoiceDocument, shareInvoiceOnWhatsApp } from "@/lib/invoice-documents";
+import { readDuplicateWarnings, runDuplicateFromInvoice } from "@/lib/duplicate-invoice-ui";
 import { StatusChip } from "./dashboard";
 import {
   AlertDialog,
@@ -115,6 +117,32 @@ function InvoiceDetail() {
   const [isrRetencionPct, setIsrRetencionPct] = useState(0);
   const [ivaRetencionPct, setIvaRetencionPct] = useState(0);
   const [savingTaxes, setSavingTaxes] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+
+  // Si esta pantalla es el destino de una duplicación reciente, muestra los
+  // avisos de cambio de precio que quedaron guardados justo antes de
+  // navegar aquí (ver runDuplicateFromInvoice en duplicate-invoice-ui.ts).
+  useEffect(() => {
+    const warnings = readDuplicateWarnings(id);
+    if (!warnings || warnings.length === 0) return;
+    for (const w of warnings) {
+      toast.warning(
+        `El precio de ${w.description} cambió de ${formatMXN(w.old_price)} a ${formatMXN(w.current_price)} desde tu última factura`,
+      );
+    }
+  }, [id]);
+
+  async function duplicate() {
+    if (!data) return;
+    setDuplicating(true);
+    try {
+      const result = await runDuplicateFromInvoice(data.invoice.id);
+      qc.invalidateQueries({ queryKey: ["invoices", "history"] });
+      if (result) navigate({ to: "/invoices/$id", params: { id: result.invoiceId } });
+    } finally {
+      setDuplicating(false);
+    }
+  }
 
   const folioFmt = data
     ? data.invoice.status === "draft"
@@ -371,12 +399,26 @@ function InvoiceDetail() {
         >
           <ArrowLeft className="size-4" />
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Detalle de factura
           </p>
           <h1 className="font-mono text-lg font-bold tracking-tight">{folioFmt}</h1>
         </div>
+        <button
+          type="button"
+          onClick={duplicate}
+          disabled={duplicating}
+          className="grid size-9 shrink-0 place-items-center rounded-full border border-border bg-surface disabled:opacity-60"
+          aria-label="Duplicar factura"
+          title="Duplicar factura"
+        >
+          {duplicating ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <CopyPlus className="size-4" />
+          )}
+        </button>
       </header>
 
       <section className="mt-5 rounded-2xl border border-border bg-surface px-5 py-4">
@@ -603,7 +645,8 @@ function InvoiceDetail() {
               onClick={() => setConfirmOpen(true)}
               className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full bg-destructive px-2 py-1.5 text-xs font-semibold text-destructive-foreground"
             >
-              <Ban className="size-3.5 shrink-0" /> <span className="truncate">Cancelar factura</span>
+              <Ban className="size-3.5 shrink-0" />{" "}
+              <span className="truncate">Cancelar factura</span>
             </button>
           </div>
         </section>
