@@ -12,11 +12,13 @@ import {
   AlertTriangle,
   Loader2,
   Trash2,
+  CopyPlus,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-errors";
 import { formatMXN, formatDateMX } from "@/lib/format";
 import { openInvoiceDocument, shareInvoiceOnWhatsApp } from "@/lib/invoice-documents";
+import { runDuplicateFromInvoice } from "@/lib/duplicate-invoice-ui";
 import { StatusChip } from "./dashboard";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -59,6 +61,7 @@ function History() {
   const qc = useQueryClient();
   const [draftToDelete, setDraftToDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   const { data: isAdmin } = useQuery({
     queryKey: ["auth", "isAdmin"],
@@ -84,6 +87,17 @@ function History() {
         (i.uuid_fiscal ?? "").toLowerCase().includes(t)
       );
     });
+
+  async function duplicate(invoiceId: string) {
+    setDuplicatingId(invoiceId);
+    try {
+      const result = await runDuplicateFromInvoice(invoiceId);
+      qc.invalidateQueries({ queryKey: ["invoices", "history"] });
+      if (result) navigate({ to: "/invoices/$id", params: { id: result.invoiceId } });
+    } finally {
+      setDuplicatingId(null);
+    }
+  }
 
   function refreshAfterReconciliation() {
     qc.invalidateQueries({ queryKey: ["invoices", "history"] });
@@ -274,6 +288,22 @@ function History() {
                         <Share2 className="size-3" /> WhatsApp
                       </button>
                     )}
+                    <button
+                      type="button"
+                      disabled={duplicatingId === inv.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        duplicate(inv.id);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-[11px] font-semibold disabled:opacity-60"
+                    >
+                      {duplicatingId === inv.id ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <CopyPlus className="size-3" />
+                      )}
+                      Duplicar
+                    </button>
                     {inv.status === "draft" && (
                       <button
                         type="button"

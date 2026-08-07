@@ -397,6 +397,7 @@ export type Database = {
           created_at: string
           currency: string
           discount: number
+          duplicated_from_invoice_id: string | null
           exchange_rate: number
           exportation: string
           facturama_id: string | null
@@ -445,6 +446,7 @@ export type Database = {
           created_at?: string
           currency?: string
           discount?: number
+          duplicated_from_invoice_id?: string | null
           exchange_rate?: number
           exportation?: string
           facturama_id?: string | null
@@ -493,6 +495,7 @@ export type Database = {
           created_at?: string
           currency?: string
           discount?: number
+          duplicated_from_invoice_id?: string | null
           exchange_rate?: number
           exportation?: string
           facturama_id?: string | null
@@ -540,6 +543,13 @@ export type Database = {
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "invoices_duplicated_from_invoice_id_fkey"
+            columns: ["duplicated_from_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
         ]
       }
       notifications: {
@@ -548,6 +558,8 @@ export type Database = {
           created_at: string
           id: string
           kind: string
+          link: string | null
+          metadata: Json | null
           read_at: string | null
           title: string
           user_id: string
@@ -557,6 +569,8 @@ export type Database = {
           created_at?: string
           id?: string
           kind?: string
+          link?: string | null
+          metadata?: Json | null
           read_at?: string | null
           title: string
           user_id: string
@@ -566,6 +580,8 @@ export type Database = {
           created_at?: string
           id?: string
           kind?: string
+          link?: string | null
+          metadata?: Json | null
           read_at?: string | null
           title?: string
           user_id?: string
@@ -806,6 +822,7 @@ export type Database = {
           default_cfdi_use: string | null
           default_payment_form: string | null
           default_payment_method: string | null
+          notification_preferences: Json | null
           notifications_enabled: boolean
           pin_enabled: boolean
           theme: string
@@ -817,6 +834,7 @@ export type Database = {
           default_cfdi_use?: string | null
           default_payment_form?: string | null
           default_payment_method?: string | null
+          notification_preferences?: Json | null
           notifications_enabled?: boolean
           pin_enabled?: boolean
           theme?: string
@@ -828,6 +846,7 @@ export type Database = {
           default_cfdi_use?: string | null
           default_payment_form?: string | null
           default_payment_method?: string | null
+          notification_preferences?: Json | null
           notifications_enabled?: boolean
           pin_enabled?: boolean
           theme?: string
