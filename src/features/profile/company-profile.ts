@@ -14,6 +14,7 @@ export type CompanyProfile = {
   csd_cer_url: string | null;
   csd_key_url: string | null;
   csd_serial_number: string | null;
+  csd_valid_from: string | null;
   csd_valid_to: string | null;
   csd_status: string | null;
   activity_profile_id: string | null;
@@ -32,7 +33,7 @@ export async function loadCompanyProfile(): Promise<CompanyProfileData> {
   const { data: company, error: companyError } = await supabase
     .from("companies")
     .select(
-      "id, user_id, legal_name, trade_name, rfc, tax_regime, postal_code, email, phone, csd_cer_url, csd_key_url, csd_serial_number, csd_valid_to, csd_status, activity_profile_id",
+      "id, user_id, legal_name, trade_name, rfc, tax_regime, postal_code, email, phone, csd_cer_url, csd_key_url, csd_serial_number, csd_valid_from, csd_valid_to, csd_status, activity_profile_id",
     )
     .eq("user_id", userData.user.id)
     .maybeSingle();
@@ -44,9 +45,9 @@ export async function loadCompanyProfile(): Promise<CompanyProfileData> {
 export function isCsdConfigured(company: CompanyProfile | null | undefined) {
   return Boolean(
     company?.csd_cer_url &&
-      company.csd_key_url &&
-      company.csd_serial_number &&
-      company.csd_valid_to &&
-      company.csd_status === "uploaded",
+    company.csd_key_url &&
+    company.csd_serial_number &&
+    company.csd_valid_to &&
+    company.csd_status === "uploaded",
   );
 }
