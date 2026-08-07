@@ -194,7 +194,11 @@ async function buildCfdiPayload(
     !paymentForm ||
     !currency ||
     !series ||
-    !folio ||
+    // folio es 0 en todo borrador sin timbrar (placeholder; finalize_cfdi_stamp
+    // lo asigna atómicamente recién al confirmarse el timbrado — ver
+    // 20260804230000_folio_only_on_issue.sql), así que 0 es válido aquí y
+    // solo se rechaza si el valor ni siquiera es numérico.
+    folio === null ||
     !exchangeRate ||
     exchangeRate <= 0
   ) {
